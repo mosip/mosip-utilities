@@ -11,7 +11,7 @@ on:
       - develop
 
 jobs:
-  build-postgres-init-docker:
+  build-kafka-producer-docker:
     runs-on: ubuntu-latest
     env:
       NAMESPACE: ${{ secrets. dev_namespace_docker_hub }}
