@@ -34,4 +34,3 @@ USER ${container_user_uid}:${container_user_gid}
 RUN pipenv install --system --deploy --ignore-pipfile
 
 CMD ["python","kafka_producer.py"]
-#CMD ["/bin/bash","-c","sleep infinity"]
