@@ -8,13 +8,13 @@ to run the dockerise application create a .env file in the folder you want to ru
 
 For dev server
 docker build: 
-### `docker build . -t dependabot` 
+# `docker build . -t dependabot` 
 docker run: 
-### `docker run --env-file ./.env  -p 3000:3000 --name apps dependabot`
+# `docker run --env-file ./.env  -p 3000:3000 --name apps dependabot`
 
 Alterntively make use of docker compose 
-### `docker-compose up` 
-### `docker-compose down` 
+# `docker-compose up` 
+# `docker-compose down` 
 ## Available Scripts
 
 In the project directory, you can run:
