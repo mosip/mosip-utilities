@@ -7,9 +7,14 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 to run the dockerise application create a .env file in the folder you want to run and it needs to have REACT_APP_ORGANISATION_NAME,REACT_APP_TOKEN variable values. Do remeber no spaces in .env file
 
 For dev server
-docker build: docker build . -t dependabot 
-docker run: docker run --env-file ./.env  -p 3000:3000 --name apps dependabot
+docker build: 
+### `docker build . -t dependabot` 
+docker run: 
+### `docker run --env-file ./.env  -p 3000:3000 --name apps dependabot`
 
+Alterntively make use of docker compose 
+### `docker-compose up` 
+### `docker-compose down` 
 ## Available Scripts
 
 In the project directory, you can run:
