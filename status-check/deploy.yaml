@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: mosip-check
 spec:
-  schedule: "*/1 * * * *" # minute  hour  day  day-of-month  month  day-of-week 
+  schedule: "* */1 * * *" # minute  hour  day  day-of-month  month  day-of-week 
   # schedule: "* * * * *"
   jobTemplate: 
     spec: 
@@ -12,7 +12,7 @@ spec:
           containers:
           - name: mosip-check
             imagePullPolicy: Always
-            image: akshathkaushal/mosip-check:v3 # change the dockerhub account here
+            image: akshathkaushal/mosip-check:v4 # change the dockerhub account here
             args:
                 - /bin/sh
                 - -c
