@@ -1,4 +1,8 @@
 # INSTRUCTIONS
+
+## Overview
+
+## Files and folder structure
 The folder structure is as follows:
 
 ```
