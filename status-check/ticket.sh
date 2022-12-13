@@ -73,7 +73,7 @@ echo ""
 echo ""
 
 # part 3
-echo "==> Following are the inspection details of images deployed in the cluster:"
+echo "==> Following are the label details of images deployed in the cluster:"
 echo ""
 
 depl_ind=0
