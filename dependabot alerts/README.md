@@ -1,55 +1,117 @@
-# Getting Started with Create React App and Redux
+# Dependabot Alerts Dashboard 
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app), using the [Redux](https://redux.js.org/) and [Redux Toolkit](https://redux-toolkit.js.org/) template.
+## Overview 
 
-## Environment variables
+This is a react Application that performs the following: 
 
-to run the dockerise application create a .env file in the folder you want to run and it needs to have REACT_APP_ORGANISATION_NAME,REACT_APP_TOKEN variable values. Do remeber no spaces in .env file
+1. Display summary of All Dependabot Alerts of an Organization along with few other parameters.  
 
-For dev server
-docker build: 
-#### `docker build . -t dependabot` 
-docker run: 
-#### `docker run --env-file ./.env  -p 3000:3000 --name apps dependabot`
+2. Provides ability to search and filter the alerts based on repo, severity, ecosystem, state. 
 
-Alterntively make use of docker compose 
-#### `docker-compose up` 
-#### `docker-compose down` 
-## Available Scripts
+3. Ability to redirect to the GitHub page of the specific alert 
 
-In the project directory, you can run:
+4. Dockerised the application for platform independence. 
+## Files and folder structure 
 
-### `npm start`
+The folder structure is as follows: 
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+``` 
+.
+|-- Dockerfile
+|-- README.md
+|-- docker-compose.yml
+|-- package-lock.json
+|-- package.json
+|-- public
+|   |-- favicon.ico
+|   |-- index.html
+|   |-- logo192.png
+|   |-- logo512.png
+|   |-- manifest.json
+|   `-- robots.txt
+`-- src
+    |-- App.css
+    |-- App.js
+    |-- App.test.js
+    |-- common
+    |   `-- config
+    |       `-- AxiosConfig.js
+    |-- index.css
+    |-- index.js
+    |-- logo.svg
+    |-- reportWebVitals.js
+    `-- setupTests.js
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+``` 
 
-### `npm test`
+### Public Folder 
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+This folder contains the files required for the react application. 
 
-### `npm run build`
+### src Folder 
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+This folder contains the files written by the user specific to this application. 
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+AxiosConfig.js file present in src/common/config contains the configuration of the API call.  
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+App.js contains all the src code related to this application 
 
-### `npm run eject`
+## Environment variables 
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+To run the application, you must create a `.env file` in the project directory to run successfully. 
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+The file needs to contain the variables in same name and format as mentioned below. 
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+`REACT_APP_ORGANISATION_NAME=yourOrgName` 
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+`REACT_APP_TOKEN=yourTokenForGithubApi` 
 
+The prefix `REACT_APP_` is required for the react application to recognize this is a variable to be used in the application. 
 
+Do remember **no spaces** in .env file 
+
+## How to run 
+In the root folder 
+Step 1: Install the packages 
+`npm install` 
+
+Step 2: Start the react development server 
+`npm start` 
+
+Runs the app in the development mode.\ 
+
+Open [http://localhost:3000](http://localhost:3000) To view it in your browser. 
+The page will reload when you make changes. 
+## Docker
+### Dockerfile 
+
+A Docker image is created by means of this file.  
+
+This docker file: 
+
+1. Written in an order to minimize the application build time as docker uses the previous cached layers till there is no change. 
+
+2. Programmed to take `env variables` at run time.  
+
+#### Docker Build and Run 
+
+The image can be built using the following command: 
+
+`docker build . -t dependabot` 
+
+The image can be run using the following command: 
+
+`docker run --env-file ./.env -p 3000:3000 --name apps dependabot` 
+
+### DockerCompose 
+
+Instead of specifying all the parameters to run the application every time a docker-compose file has been created for this application.  
+
+To run the application: `docker-compose up`  
+
+To stop the application: `docker-compose down` 
+
+Docker compose comes in handy while using multiple docker containers.  
+## Work Flow of the application 
+
+Once the application is started either using conventional npm start or docker compose, application is going to fetch the organization Name and API Token from the environment file. These environment variables are used to call GitHub API of dependabot alerts. These alerts are then displayed in tabular form with important parameters. You filter and find the alert you want to work on and click on the button of that row. This is going to redirect you to the GitHub page where you can create a PR or dismiss an alert. 
