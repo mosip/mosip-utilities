@@ -78,7 +78,7 @@ In the root folder
 2. Step 2: Start the react development server 
 `npm start` 
 
-Runs the app in the development mode.\ 
+Runs the app in the development mode.
 
 Open [http://localhost:3000](http://localhost:3000) To view it in your browser. 
 
@@ -94,7 +94,7 @@ This docker file:
 
 2. Programmed to take `env variables` at run time.  
 
-### Docker Build and Run 
+### Docker build and run 
 
 The image can be built using the following command: 
 
