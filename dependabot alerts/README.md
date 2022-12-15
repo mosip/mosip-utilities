@@ -72,15 +72,16 @@ Do remember **no spaces** in .env file
 
 ## How to run 
 In the root folder 
-Step 1: Install the packages 
+1. Step 1: Install the packages 
 `npm install` 
 
-Step 2: Start the react development server 
+2. Step 2: Start the react development server 
 `npm start` 
 
 Runs the app in the development mode.\ 
 
 Open [http://localhost:3000](http://localhost:3000) To view it in your browser. 
+
 The page will reload when you make changes. 
 ## Docker
 ### Dockerfile 
@@ -93,7 +94,7 @@ This docker file:
 
 2. Programmed to take `env variables` at run time.  
 
-#### Docker Build and Run 
+### Docker Build and Run 
 
 The image can be built using the following command: 
 
@@ -103,7 +104,7 @@ The image can be run using the following command:
 
 `docker run --env-file ./.env -p 3000:3000 --name apps dependabot` 
 
-### DockerCompose 
+### Docker Compose 
 
 Instead of specifying all the parameters to run the application every time a docker-compose file has been created for this application.  
 
