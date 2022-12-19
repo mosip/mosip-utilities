@@ -28,8 +28,8 @@ filename=$1
 
 while read REPO_NAME
 do
-	#Creating a remote repository corresponding to each line, where the line represents the repository's name.
-	#Will have to install and configure the gh command (using sudo snap install gh) before using the below line. Also, gh auth login needs to be configuredi.
+	#Creating a remote repository corresponding to each line, where each line represents a repository name.
+	#Will have to install and configure the gh command (using sudo snap install gh) before using the below line. Also, gh auth login needs to be configured.
 	gh repo create $REPO_NAME --public
 	
 	#The new Repo's URL is constructed here.
