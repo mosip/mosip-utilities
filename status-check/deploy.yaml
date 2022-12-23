@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mosip-check
+spec:
+  schedule: "* */1 * * *" # minute  hour  day  day-of-month  month  day-of-week 
+  # schedule: "* * * * *"
+  jobTemplate: 
+    spec: 
+      template: 
+        spec: 
+          containers:
+          - name: mosip-check
+            imagePullPolicy: Always
+            image: akshathkaushal/mosip-check:v4 # change the dockerhub account here
+            args:
+                - /bin/sh
+                - -c
+                - ./ticket.sh; exit 0;
+          serviceAccountName: mosip-check-role
+          restartPolicy: OnFailure
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: mosip-check-role
+subjects:
+- kind: ServiceAccount
+  name: mosip-check-role
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mosip-check-role
