@@ -8,4 +8,4 @@ RUN apt update && \
       mv ./kubectl /usr/local/bin/kubectl
 RUN apt-get install -y jq
 COPY ./check.sh .
-sed -i -e 's/\r$//' check.sh
+RUN sed -i -e 's/\r$//' check.sh
