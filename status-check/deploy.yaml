@@ -16,7 +16,7 @@ spec:
             args:
                 - /bin/sh
                 - -c
-                - ./ticket.sh; exit 0;
+                - ./check.sh; exit 0;
           serviceAccountName: mosip-check-role
           restartPolicy: OnFailure
 ---
