@@ -26,8 +26,30 @@ function installing_minio-client() {
   echo Copy secrets
   ./copy_secrets.sh
 
+  read -p "Please enter the time(hr) to run the cronjob every day (time: 0-23) : " time
+  if [ -z "$time" ]; then
+     echo "ERROR: Time cannot be empty; EXITING;";
+     exit 1;
+  fi
+  if ! [ $time -eq $time ] 2>/dev/null; then
+     echo "ERROR: Time $time is not a number; EXITING;";
+     exit 1;
+  fi
+  if [ $time -gt 23 ] || [ $time -lt 0 ] ; then
+     echo "ERROR: Time should be in range ( 0-23 ); EXITING;";
+     exit 1;
+  fi
+
+  read -p "Please provide number of days the apitestrig reports needed to be cleared from minio [format:'no_of_days'd](eg:3d) : " NO_OF_DAYS
+  if [ -z "$NO_OF_DAYS" ]; then
+      echo "ERROR: Number of days to clear the test report cannot be empty; EXITING;";
+      exit 1;
+  fi
+
   echo Installing minio-client
-  helm -n $NS install minio-client ./minio-client-helm --version $CHART_VERSION
+  helm -n $NS install minio-client ./minio-client-helm --set minioclient.no_of_days=$NO_OF_DAYS \
+  --set crontime="0 $time * * *" \
+  --version $CHART_VERSION
   
   echo Installed minio-client utility
   return 0
