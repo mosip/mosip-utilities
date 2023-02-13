@@ -8,6 +8,7 @@
 [API Test Rig](https://github.com/mosip/mosip-infra/blob/develop/deployment/v3/mosip/apitestrig/README.md) module must be deployed before installing the minio client utility.
 
 ## Install
+Navigate to [minio-client](https://github.com/mosip/mosip-infra/tree/develop/deployment/v3/utils/minio-client) folder in utils section of mosip-infra
 ```sh
 ./install.sh
 ```
