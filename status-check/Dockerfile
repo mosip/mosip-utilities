@@ -7,4 +7,5 @@ RUN apt update && \
       chmod +x ./kubectl && \
       mv ./kubectl /usr/local/bin/kubectl
 RUN apt-get install -y jq
-COPY ./ticket.sh .
+COPY ./check.sh .
+RUN sed -i -e 's/\r$//' check.sh
