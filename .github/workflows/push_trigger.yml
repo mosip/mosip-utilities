@@ -44,6 +44,8 @@ jobs:
           IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
           if [[ $BRANCH_NAME == master ]]; then
             VERSION=latest
+          elif [[ $BRANCH_NAME == intern ]]; then
+            VERSION=develop
           else
             VERSION=$BRANCH_NAME
           fi

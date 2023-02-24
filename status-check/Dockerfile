@@ -10,4 +10,3 @@ RUN apt-get install -y jq
 COPY ./check.sh .
 RUN chmod +x check.sh
 RUN sed -i -e 's/\r$//' check.sh
-
