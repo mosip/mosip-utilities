@@ -161,7 +161,7 @@ def get_message(rid, reg_type, topic):
     return {
         "reg_type":reg_type,
         "rid":rid,
-        "isValid":False,
+        "isValid":True,
         "internalError":False,
         "messageBusAddress":{
             "address":message_bus_address
