@@ -1,29 +1,36 @@
 # Minio client Utility
 
 ## Context
-* This utility helps to clear apitestrig reports from the minio dashboard. 
-* The utility is executed as a cronjob which will be executed daily to clear the reports that are older than 3 days.
+* This utility helps to clear objects from S3 buckets.
+* The utility is expected to clear objects that are older than specified no of retention days.
+* Necesary inputs for the tool are:
+  * S3_SERVER_URL
+  * S3_ACCESS_KEY 
+  * S3_SECRET_KEY
+  * S3_BUCKET_NAME
+  * S3_RETENTION_DAYS
 
 ## Prerequisites
-[API Test Rig](https://github.com/mosip/mosip-infra/blob/develop/deployment/v3/mosip/apitestrig/README.md) module must be deployed before installing the minio client utility.
+* S3 accessible using the Server URL.
+* ACCESS and SECRET Keys keys having delete role for the targetted bucket in S3.
+* Docker installed in respective server from where the tool will be executed.
 
 ## Install
-Navigate to [minio-client](https://github.com/mosip/mosip-infra/tree/develop/deployment/v3/utils/minio-client) folder in utils section of mosip-infra
-```sh
-./install.sh
+``` 
+sudo docker run -itd \
+-e S3_SERVER_URL='<Server URL> \
+-e S3_ACCESS_KEY='Access key> \
+-e S3_SECRET_KEY='secret key> \
+-e S3_BUCKET_NAME='target bucket name' \
+-e S3_RETENTION_DAYS='no of retention days' \
+-p 80:80 \
+-name <CONTAINER NAME> <dockerhub_id/image_name>
 ```
-#### Run minio-client-utility manually via Rancher UI
-* Select the minio-client cronjob and click the 'Run Now' option
-![mc-1.png](images/mc-1.png)
+## Delete
+```
+sudo docker rm -rf <container id/name>
+```
 
-#### Run minio-client-utility manually via CLI
-* Download Kubernetes cluster `kubeconfig` file from `rancher dashboard` to your local.
-* Install `kubectl` package to your local machine.
-* Run minio-client manually via CLI by creating a new job from an existing k8s cronjob.
-  ```
-  kubectl --kubeconfig=<k8s-config-file> -n minio-client create job --from=cronjob/<cronjob-name> <job-name>
-  ```
-  Example:
-  ```
-  kubectl --kubeconfig=/home/xxx/Downloads/dev.config -n minio-client create job --from=cronjob/cronjob-minio-client cronjob-minio-client
-  ```
+### Restart
+```
+sudo docker restart <container id/name>
