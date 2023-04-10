@@ -60,7 +60,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }} # required
         if: failure() # Pick up events even if the job fails or is canceled.
 
-  build-s3-utility-docker:
+  build-s3-utility:
     runs-on: ubuntu-latest
     env:
       NAMESPACE: ${{ secrets. dev_namespace_docker_hub }}
