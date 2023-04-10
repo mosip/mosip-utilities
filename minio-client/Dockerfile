@@ -9,13 +9,13 @@ wget https://dl.minio.io/client/mc/release/linux-amd64/mc && \
 chmod +x mc && mv mc /usr/local/bin 
 
 # Set the environment variables for your Minio server
-ENV MINIO_ACCESS_KEY= 
+ENV S3_ACCESS_KEY= 
 ENV S3_SECRET_KEY= 
-ENV MINIO_SERVER_URL= 
-ENV BUCKET_NAME=
-ENV NO_OF_DAYS=
+ENV S3_SERVER_URL= 
+ENV S3_BUCKET_NAME=
+ENV S3_RETENTION_DAYS=
 
 # Delete objects older than 3 days
-CMD mc alias set myminio $MINIO_SERVER_URL $MINIO_ACCESS_KEY $S3_SECRET_KEY && mc rm --recursive --force --older-than $NO_OF_DAYS myminio/$BUCKET_NAME && echo "Minio client utility executed successfully"
+CMD mc alias set myminio $S3_SERVER_URL $S3_ACCESS_KEY $S3_SECRET_KEY && mc rm --recursive --force --older-than $S3_RETENTION_DAYS myminio/$S3_BUCKET_NAME && echo "Minio client utility executed successfully"
 
 
