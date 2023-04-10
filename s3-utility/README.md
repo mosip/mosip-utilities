@@ -18,11 +18,11 @@
 ## Install
 ``` 
 sudo docker run -itd \
--e S3_SERVER_URL='<Server URL> \
--e S3_ACCESS_KEY='<Access key> \
--e S3_SECRET_KEY='<secret key> \
--e S3_BUCKET_NAME='target bucket name' \
--e S3_RETENTION_DAYS='no of retention days' \
+-e S3_SERVER_URL='<Server URL>' \
+-e S3_ACCESS_KEY='<Access key>' \
+-e S3_SECRET_KEY='<secret key>' \
+-e S3_BUCKET_NAME='<target bucket name>' \
+-e S3_RETENTION_DAYS='<no of retention days>' \
 -p 80:80 \
 -name <CONTAINER NAME> <dockerhub_id/image_name>
 ```
