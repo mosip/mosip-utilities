@@ -1,9 +1,9 @@
-# S3 client Utility
+# S3 Client Utility
 
 ## Context
 * This utility helps to clear objects from S3 buckets.
 * The utility is expected to clear objects that are older than specified no of retention days.
-* Necesary inputs for the tool are:
+* Necessary inputs for the tool are:
   * S3_SERVER_URL
   * S3_ACCESS_KEY 
   * S3_SECRET_KEY
@@ -12,15 +12,15 @@
 
 ## Prerequisites
 * S3 accessible using the Server URL.
-* ACCESS and SECRET Keys keys having delete role for the targetted bucket in S3.
+* ACCESS and SECRET Keys having delete role for the targeted bucket in S3.
 * Docker installed in respective server from where the tool will be executed.
 
 ## Install
 ``` 
 sudo docker run -itd \
 -e S3_SERVER_URL='<Server URL> \
--e S3_ACCESS_KEY='Access key> \
--e S3_SECRET_KEY='secret key> \
+-e S3_ACCESS_KEY='<Access key> \
+-e S3_SECRET_KEY='<secret key> \
 -e S3_BUCKET_NAME='target bucket name' \
 -e S3_RETENTION_DAYS='no of retention days' \
 -p 80:80 \
