@@ -1,4 +1,4 @@
-# Minio client Utility
+# S3 client Utility
 
 ## Context
 * This utility helps to clear objects from S3 buckets.
