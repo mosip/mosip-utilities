@@ -16,6 +16,6 @@ ENV S3_BUCKET_NAME=
 ENV S3_RETENTION_DAYS=
 
 # Delete objects older than 3 days
-CMD mc alias set myminio $S3_SERVER_URL $S3_ACCESS_KEY $S3_SECRET_KEY && mc rm --recursive --force --older-than $S3_RETENTION_DAYS myminio/$S3_BUCKET_NAME && echo "Minio client utility executed successfully"
+CMD mc alias set myminio $S3_SERVER_URL $S3_ACCESS_KEY $S3_SECRET_KEY && mc rm --recursive --force --older-than $S3_RETENTION_DAYS myminio/$S3_BUCKET_NAME && echo "Objects from $S3_BUCKET_NAME bucket older than $S3_RETENTION_DAYS days has been deleted successfully"
 
 
