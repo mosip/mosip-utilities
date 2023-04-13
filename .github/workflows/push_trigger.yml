@@ -60,12 +60,12 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }} # required
         if: failure() # Pick up events even if the job fails or is canceled.
 
-  build-s3-utility:
+  build-minio-client-util:
     runs-on: ubuntu-latest
     env:
       NAMESPACE: ${{ secrets. dev_namespace_docker_hub }}
-      SERVICE_NAME: s3-utility
-      SERVICE_LOCATION: s3-utility
+      SERVICE_NAME: minio-client-util
+      SERVICE_LOCATION: minio-client-util
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
