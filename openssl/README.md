@@ -5,7 +5,7 @@
 
 ## Build docker
 ```
-docker build -t openssl:tagname
+docker build -t openssl:tagname -f Dockerfile .
 ```
 
 ## Generate via docker
