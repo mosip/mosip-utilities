@@ -25,7 +25,9 @@ ARG container_user_gid=1001
 RUN apt-get -y update \
 && apt-get install -y openssl sudo\
 && groupadd -g ${container_user_gid} ${container_user_group} \
-&& useradd -u ${container_user_uid} -g ${container_user_group} -s /bin/sh -m ${container_user}
+&& useradd -u ${container_user_uid} -g ${container_user_group} -s /bin/sh -m ${container_user} \
+&& echo "${container_user} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers\
+&& usermod -aG sudo ${container_user}
 
 # set working directory for the user
 WORKDIR /home/${container_user}
