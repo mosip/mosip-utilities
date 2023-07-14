@@ -1,0 +1,28 @@
+{
+  "name": "mosip",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sohamk990/MOSIP.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sohamk990/MOSIP/issues"
+  },
+  "homepage": "https://github.com/sohamk990/MOSIP#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "nodemon": "^2.0.20",
+    "octokit": "^2.0.10",
+    "stable": "^0.1.8"
+  }
+}

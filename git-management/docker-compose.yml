@@ -1,0 +1,20 @@
+version: '3.10'
+
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: ./Dockerfile
+    image: "mosip-backend"
+    ports:
+      - "5000:5000"
+
+  frontend:
+    depends_on:
+      - backend
+    build:
+      context: ./client
+      dockerfile: ./Dockerfile
+    image: "mosip-frontend"
+    ports:
+      - "3000:3000"
