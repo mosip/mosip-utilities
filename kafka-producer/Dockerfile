@@ -9,7 +9,6 @@ LABEL source=${SOURCE}
 LABEL commit_hash=${COMMIT_HASH}
 LABEL commit_id=${COMMIT_ID}
 LABEL build_time=${BUILD_TIME}
-
 RUN pip3 install pipenv
 
 ARG container_user=mosip

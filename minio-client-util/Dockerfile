@@ -8,7 +8,6 @@ LABEL source=${SOURCE}
 LABEL commit_hash=${COMMIT_HASH}
 LABEL commit_id=${COMMIT_ID}
 LABEL build_time=${BUILD_TIME}
-
 USER root
 
 # Install mc and its dependencies
