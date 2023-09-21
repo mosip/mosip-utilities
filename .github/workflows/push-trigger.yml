@@ -22,18 +22,6 @@ on:
       - release*
 
 jobs:
-  build-maven-kafka-producer:
-    uses: mosip/kattu/.github/workflows/maven-build.yml@master
-    with:
-      SERVICE_LOCATION: ./
-      BUILD_ARTIFACT: kafka-producer
-    secrets:
-      OSSRH_USER: ${{ secrets.OSSRH_USER }}
-      OSSRH_SECRET: ${{ secrets.OSSRH_SECRET }}
-      OSSRH_TOKEN: ${{ secrets.OSSRH_TOKEN }}
-      GPG_SECRET: ${{ secrets.GPG_SECRET }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-
   build-kafka-producer-docker:
     strategy:
       matrix:
@@ -44,7 +32,6 @@ jobs:
             SERVICE_NAME: 'minio-client-util'
           - SERVICE_LOCATION: 'openssl'
             SERVICE_NAME: 'openssl'
-
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
     uses: mosip/kattu/.github/workflows/docker-build.yml@master
@@ -52,7 +39,7 @@ jobs:
       SERVICE_LOCATION: ${{ matrix.SERVICE_LOCATION }}
       SERVICE_NAME: ${{ matrix.SERVICE_NAME }}
       BUILD_ARTIFACT: ${{ matrix.BUILD_ARTIFACT || false }}
-  secrets:
+    secrets:
       DEV_NAMESPACE_DOCKER_HUB: ${{ secrets.DEV_NAMESPACE_DOCKER_HUB }}
       ACTOR_DOCKER_HUB: ${{ secrets.ACTOR_DOCKER_HUB }}
       RELEASE_DOCKER_HUB: ${{ secrets.RELEASE_DOCKER_HUB }}
