@@ -9,4 +9,6 @@ docker exec -it nm /bin/bash
 
 ls /usr/share/nginx/html
 
+# cronjob is set for 2 minutes. For every 2 minutes, the reports will be downloaded
+
 # At present, all the values are predefined in the code
