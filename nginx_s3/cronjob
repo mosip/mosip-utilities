@@ -1,0 +1,16 @@
+#!/bin/bash
+
+MC_SERVER_URL="http://172.16.145.175:9000"
+MC_ACCESS_KEY="minioadmin"
+MC_SECRET_KEY="minioadmin"
+MC_BUCKETS="automation,esignet"
+DESTINATION_DIR=/usr/share/nginx/html/reports 
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+*/2 * * * * root MC_SERVER_URL="$MC_SERVER_URL" MC_ACCESS_KEY="$MC_ACCESS_KEY" MC_SECRET_KEY="$MC_SECRET_KEY" MC_BUCKETS="$MC_BUCKETS" DESTINATION_DIR="$DESTINATION_DIR" /usr/local/bin/minio_download_script.sh >> /var/log/minio_download.log 2>&1
+
+
+
+
