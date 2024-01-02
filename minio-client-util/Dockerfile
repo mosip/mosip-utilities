@@ -20,10 +20,16 @@ chmod +x mc && mv mc /usr/local/bin
 ENV S3_ACCESS_KEY= 
 ENV S3_SECRET_KEY= 
 ENV S3_SERVER_URL= 
-ENV S3_BUCKET_NAME=
+ENV S3_BUCKET_LIST=
 ENV S3_RETENTION_DAYS=
 
 # Delete objects older than 3 days
-CMD mc alias set myminio $S3_SERVER_URL $S3_ACCESS_KEY $S3_SECRET_KEY && mc rm --recursive --force --older-than $S3_RETENTION_DAYS myminio/$S3_BUCKET_NAME && echo "Objects from $S3_BUCKET_NAME bucket older than $S3_RETENTION_DAYS days has been deleted successfully"
-
-
+CMD mc alias set myminio $S3_SERVER_URL $S3_ACCESS_KEY $S3_SECRET_KEY && \
+    for S3_BUCKET in $( echo $S3_BUCKET_LIST | sed 's/,/ /g'); do \
+       if mc ls myminio/$S3_BUCKET 2>/dev/null; then \
+         mc rm --recursive --force --older-than $S3_RETENTION_DAYS myminio/$S3_BUCKET && \
+         echo "Objects from $S3_BUCKET bucket older than $S3_RETENTION_DAYS days has been deleted successfully"; \
+       else \
+         echo "Bucket $S3_BUCKET does not exist or is empty"; \
+       fi; \
+    done
