@@ -4,7 +4,7 @@ on:
   release:
     types: [published]
   pull_request:
-    types: [opened]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       message:
@@ -32,6 +32,8 @@ jobs:
             SERVICE_NAME: 'minio-client-util'
           - SERVICE_LOCATION: 'openssl'
             SERVICE_NAME: 'openssl'
+          - SERVICE_LOCATION: 'openjdk/17-jre'
+            SERVICE_NAME: 'openjdk-17-jre'
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
     uses: mosip/kattu/.github/workflows/docker-build.yml@master
