@@ -21,7 +21,7 @@ ENV container_user_gid=${container_user_gid}
 
 # Install mc and its dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openjdk-17-jre && \
+    apt-get install -y --no-install-recommends openjdk-17-jre wget && \
     java --version && \
     groupadd -g ${container_user_gid} ${container_user_group} && \
     useradd -u ${container_user_uid} -g ${container_user_group} -s /bin/bash -m ${container_user} && \
