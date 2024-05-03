@@ -34,6 +34,8 @@ jobs:
             SERVICE_NAME: 'openssl'
           - SERVICE_LOCATION: 'openjdk/17-jre'
             SERVICE_NAME: 'openjdk-17-jre'
+          - SERVICE_LOCATION: 'openjdk/21-jre'
+            SERVICE_NAME: 'openjdk-21-jre'
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
     uses: mosip/kattu/.github/workflows/docker-build.yml@master
