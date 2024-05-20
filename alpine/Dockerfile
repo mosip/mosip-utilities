@@ -11,4 +11,5 @@ LABEL build_time=${BUILD_TIME}
 
 # Install mc and its dependencies
 RUN apk update && \
+    apk add --no-cache --upgrade bash && \
     apk --no-cache add curl
