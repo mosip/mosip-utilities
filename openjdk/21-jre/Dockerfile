@@ -27,7 +27,4 @@ ENV LANG=C.UTF-8
 # Install mc and its dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openjdk-21-jre wget unzip && \
-    java --version && \
-    groupadd -g ${container_user_gid} ${container_user_group} && \
-    useradd -u ${container_user_uid} -g ${container_user_group} -s /bin/bash -m ${container_user} && \
-    mkdir -p /home/${container_user} \
+    java --version
