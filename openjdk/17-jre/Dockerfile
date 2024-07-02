@@ -19,7 +19,7 @@ ENV container_user_group=${container_user_group}
 ENV container_user_uid=${container_user_uid}
 ENV container_user_gid=${container_user_gid}
 
-# Install mc and its dependencies
+# Install packages
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openjdk-17-jre wget && \
     java --version && \
