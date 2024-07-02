@@ -24,7 +24,7 @@ ENV PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/
 ENV JAVA_VERSION=21
 ENV LANG=C.UTF-8
 
-# Install mc and its dependencies
+# Install packages
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openjdk-21-jre wget unzip && \
     java --version

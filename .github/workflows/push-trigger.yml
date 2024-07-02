@@ -1,4 +1,4 @@
-name: Maven Package upon a push
+name: Docker image builds
 
 on:
   release:
@@ -28,23 +28,33 @@ jobs:
         include:
           - SERVICE_LOCATION: 'kafka-producer'
             SERVICE_NAME: 'kafka-producer'
+            BASE_IMAGE_BUILD: false
           - SERVICE_LOCATION: 'minio-client-util'
             SERVICE_NAME: 'minio-client-util'
+            BASE_IMAGE_BUILD: true
           - SERVICE_LOCATION: 'openssl'
             SERVICE_NAME: 'openssl'
+            BASE_IMAGE_BUILD: true
           - SERVICE_LOCATION: 'openjdk/17-jre'
             SERVICE_NAME: 'openjdk-17-jre'
+            BASE_IMAGE_BUILD: true
           - SERVICE_LOCATION: 'openjdk/21-jre'
             SERVICE_NAME: 'openjdk-21-jre'
+            BASE_IMAGE_BUILD: true
           - SERVICE_LOCATION: 'alpine'
             SERVICE_NAME: 'alpine'
+            BASE_IMAGE_BUILD: true
+          - SERVICE_LOCATION: 'openjdk/21-jdk'
+            SERVICE_NAME: 'openjdk-21-jdk'
+            BASE_IMAGE_BUILD: true
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
-    uses: mosip/kattu/.github/workflows/docker-build.yml@master
+    uses: mosip/kattu/.github/workflows/docker-build.yml@develop
     with:
       SERVICE_LOCATION: ${{ matrix.SERVICE_LOCATION }}
       SERVICE_NAME: ${{ matrix.SERVICE_NAME }}
       BUILD_ARTIFACT: ${{ matrix.BUILD_ARTIFACT || false }}
+      BASE_IMAGE_BUILD: ${{ matrix.BASE_IMAGE_BUILD }}
     secrets:
       DEV_NAMESPACE_DOCKER_HUB: ${{ secrets.DEV_NAMESPACE_DOCKER_HUB }}
       ACTOR_DOCKER_HUB: ${{ secrets.ACTOR_DOCKER_HUB }}
