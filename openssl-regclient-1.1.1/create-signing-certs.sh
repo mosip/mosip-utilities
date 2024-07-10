@@ -9,7 +9,8 @@ set -e  # Exit the script if any command fails
 # Get the keystore password from the first argument
 KEYSTORE_PWD=$(openssl rand -base64 10)
 
-echo "Keystore password provided: $KEYSTORE_PWD"
+pwd
+ls
 
 # Certificate Authority
 echo "===================================="
@@ -40,12 +41,12 @@ echo "Existing ConfigMap and Secret deleted."
 # Create new ConfigMap with certificates
 echo "Creating new ConfigMap with certificates..."
 kubectl create configmap -n "$NAMESPACE" regclient-certs \
-  --from-file=/scripts/certs/Client.crt \
-  --from-file=/scripts/certs/Client.csr \
-  --from-file=/scripts/certs/Client.key \
-  --from-file=/scripts/certs/RootCA.crt \
-  --from-file=/scripts/certs/RootCA.key \
-  --from-file=/scripts/certs/keystore.p12 \
+  --from-file=/mosip/certs/Client.crt \
+  --from-file=/mosip/certs/Client.csr \
+  --from-file=/mosip/certs/Client.key \
+  --from-file=/mosip/certs/RootCA.crt \
+  --from-file=/mosip/certs/RootCA.key \
+  --from-file=/mosip/certs/keystore.p12 \
   -o yaml --dry-run=client | kubectl apply -f - || { echo "Failed to create ConfigMap"; exit 1; }
 echo "New ConfigMap created."
 
