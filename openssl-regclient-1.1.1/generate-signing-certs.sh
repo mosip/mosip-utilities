@@ -21,8 +21,8 @@ echo "===================================="
 echo "Creating CLIENT certificate for CodeSigning"
 echo "===================================="
 openssl genrsa -out ./certs/Client.key 4096
-openssl req -new -key ./certs/Client.key -out ./certs/Client.csr -config ./client-openssl.cnf
-openssl x509 -req -extensions v3_req -extfile ./client-openssl.cnf -days 1826 -in ./certs/Client.csr -CA ./certs/RootCA.crt -CAkey ./certs/RootCA.key -set_serial 01 -out ./certs/Client.crt
+openssl req -new -key ./certs/Client.key -out ./certs/Client.csr -config ./regclient-openssl.cnf
+openssl x509 -req -extensions v3_req -extfile ./regclient-openssl.cnf -days 1826 -in ./certs/Client.csr -CA ./certs/RootCA.crt -CAkey ./certs/RootCA.key -set_serial 01 -out ./certs/Client.crt
 openssl verify -CAfile ./certs/RootCA.crt ./certs/Client.crt
 openssl pkcs12 -export -in ./certs/Client.crt -inkey ./certs/Client.key -out ./certs/keystore.p12 -name "CodeSigning" -password pass:$KEYSTORE_PWD
 

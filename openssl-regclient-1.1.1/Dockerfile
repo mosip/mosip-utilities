@@ -20,15 +20,13 @@ LABEL build_time=${BUILD_TIME}
 ENV work_dir=/home/${container_user}
 
 # Copy configuration files to the work directory
-COPY create-signing-certs.sh *.cnf ${work_dir}/
+COPY generate-signing-certs.sh *.cnf ${work_dir}/
 
 # Install packages, create user, download kubectl, and set permissions
 RUN apt-get update && \
-    apt-get install -y openssl sudo curl && \
+    apt-get install -y openssl curl && \
     groupadd -g ${container_user_gid} ${container_user_group} && \
     useradd -u ${container_user_uid} -g ${container_user_group} -s /bin/sh -m ${container_user} && \
-    echo "${container_user} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-    usermod -aG sudo ${container_user} && \
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
     rm kubectl && \
@@ -43,4 +41,4 @@ USER ${container_user_uid}:${container_user_gid}
 WORKDIR ${work_dir}
 
 # Set the entry point
-ENTRYPOINT ["/bin/bash", "create-signing-certs.sh"]
+ENTRYPOINT ["/bin/bash", "generate-signing-certs.sh"]

@@ -1,7 +1,6 @@
-## Certificate Generation Docker Image
+## keystore Docker Image
 ## Overview
-This repository provides a Docker image and Kubernetes Job configuration for generating test certificates and secrets. It uses OpenSSL to create a Root CA certificate and a Client certificate, and then packages these into a ConfigMap and Secret for use in Kubernetes applications. This is intended for development and testing purposes only.
-
+This Directory provides a Docker image for generating openssl certificates and secrets. It uses OpenSSL to create a Root CA certificate and a Client certificate, and then packages these into a ConfigMap and Secret for use in Kubernetes applications.
 ## Docker Image
 The Docker image contains:
 
@@ -22,7 +21,7 @@ The script then deletes existing ConfigMaps and Secrets, and creates new ones wi
 
 ## Kubernetes Job Configuration
 The YAML file configures a Kubernetes Job to run the create-signing-certs.sh script. It mounts a volume for storing certificates and sets up environment variables.
-The configuration was present in helm templates.
+The configuration was present in mosip-helm repo.
 
 
 ## Usage Instructions
@@ -59,7 +58,7 @@ Example Commands for Troubleshooting
 Check the Status of the Job
 
 ```
-kubectl describe job {{.Release.Name}}-{{ .Release.Namespace }}-job
+kubectl describe job {{ .Values.job.name }}-{{ .Release.Namespace }}
 ```
 Inspect the ConfigMap and Secret
 ```
@@ -72,4 +71,3 @@ If the job fails, you can debug inside the running pod:
 ```
 kubectl exec -it pod/{{.Release.Name}} -- /bin/bash
 ```
-## Notes: please wait for job to finish and then deploy regclient main pod.
