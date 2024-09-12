@@ -1,0 +1,102 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  Building_Frontend:
+      env:
+        working-directory: ./client
+
+      strategy:
+            matrix:
+              ubuntu_lst: [ubuntu-latest]
+              node-version: [18.x,16.x]
+
+      runs-on: ${{matrix.ubuntu_lst}}    
+      steps:
+
+        - uses: actions/checkout@v3
+
+        - name: Use Node.js ${{ matrix.node-version }}        
+          uses: actions/setup-node@v3        
+          with:
+            node-version: ${{ matrix.node-version }}
+
+        - name: Installing dependencies
+          working-directory: ${{env.working-directory}}
+          run: |
+              npm install
+        - name: Building Project
+          working-directory: ${{env.working-directory}}
+          run: CI=false npm run build
+  
+  Building_Backend:
+      env:
+        working-directory: ./server
+
+      strategy:
+            matrix:
+              ubuntu_lst: [ubuntu-latest]
+              node-version: [18.x,16.x]
+
+      runs-on: ${{matrix.ubuntu_lst}}    
+      steps:
+
+        - uses: actions/checkout@v3
+
+        - name: Use Node.js ${{ matrix.node-version }}        
+          uses: actions/setup-node@v3        
+          with:
+            node-version: ${{ matrix.node-version }}
+
+        - name: Installing dependencies
+          working-directory: ${{env.working-directory}}
+          run: |
+              npm ci
+              npm install
+  
+  Containerizing_Frontend:
+    needs: Building_Frontend
+    runs-on: ubuntu-latest
+    
+    env:
+      working-directory: ./client
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Login to DockerHub
+        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      - name: Build Image
+        working-directory: ${{env.working-directory}}
+        run: docker build -t sohamk990/mosip-frontend:latest .
+      
+      - name: Publish Image
+        run: docker push sohamk990/mosip-frontend:latest
+  
+  Containerizing_Backend:    
+    needs: Building_Backend
+    runs-on: ubuntu-latest
+    env:
+      working-directory: ./server
+      
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Build Image
+        working-directory: ${{env.working-directory}}
+        run: docker build -t sohamk990/mosip-backend:latest .
+      
+      - name: Publish Image
+        run: docker push sohamk990/mosip-backend:latest
