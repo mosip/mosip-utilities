@@ -9,11 +9,11 @@ from botocore.exceptions import ClientError
 import pytz
 
 # Configuration
-S3_BUCKET = os.getenv("S3_BUCKET", "your-s3-bucket-name")
-S3_BASE_FOLDER = os.getenv("S3_BASE_FOLDER", "softhsm")
+S3_BUCKET = os.getenv("S3_BUCKET", "s3-bucket-name")
+S3_BASE_FOLDER = os.getenv("S3_BASE_FOLDER", "softhsmbackup")
 NAMESPACE = os.getenv("NAMESPACE", "softhsm")
-TOKENS_PATH = os.getenv("TOKENS_PATH", "/softhsm/tokens")
-DAYS_TO_KEEP = int(os.getenv("DAYS_TO_KEEP", 15))
+TOKENS_PATH = os.getenv("POD_TOKENS_PATH", "/softhsm/tokens")
+DAYS_TO_KEEP = int(os.getenv("S3_RETENTION_DAYS", 15))
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "us-west-1")

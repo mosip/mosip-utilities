@@ -41,11 +41,11 @@ COPY . .
 # Install the required packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-ENV S3_BUCKET="your-s3-bucket-name"
-ENV S3_BASE_FOLDER="softhsm"
+ENV S3_BUCKET="s3-bucket-name"
+ENV S3_BASE_FOLDER="softhsmbackup"
 ENV NAMESPACE="softhsm"
-ENV TOKENS_PATH="/softhsm/tokens"
-ENV DAYS_TO_KEEP=15
+ENV POD_TOKENS_PATH="/softhsm/tokens"
+ENV S3_RETENTION_DAYS=15
 ENV AWS_ACCESS_KEY_ID=""
 ENV AWS_SECRET_ACCESS_KEY=""
 ENV AWS_REGION=""
