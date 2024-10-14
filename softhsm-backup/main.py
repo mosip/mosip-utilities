@@ -49,20 +49,30 @@ def upload_to_s3(local_folder, s3_path):
         raise
 
 def delete_old_s3_folders(s3_folder, days=DAYS_TO_KEEP):
-    """Delete folders in S3 older than a specified number of days."""
-    # Make the cutoff date timezone-aware
     utc = pytz.utc
     cutoff_date = datetime.now(utc) - timedelta(days=days)
 
     # List objects in the specified S3 folder
     paginator = s3.get_paginator('list_objects_v2')
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=s3_folder + '/'):
-        for obj in page.get('Contents', []):
-            last_modified = obj['LastModified']
-            s3_key = obj['Key']
-            if last_modified < cutoff_date:
-                logging.info(f"Deleting old object: {s3_key}")
-                s3.delete_object(Bucket=S3_BUCKET, Key=s3_key)
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=s3_folder + '/', Delimiter='/'):
+        for common_prefix in page.get('CommonPrefixes', []):
+            folder_name = common_prefix['Prefix'].rstrip('/').split('/')[-1]  # Get the folder name
+            try:
+                folder_date_str = folder_name.split('-')[-6:]  # Extract DD-MM-YY-HH-MM-UTC
+                folder_date_str = '-'.join(folder_date_str[:-1])  # Remove the "UTC" part
+                folder_date = datetime.strptime(folder_date_str, '%d-%m-%y-%H-%M').replace(tzinfo=utc)
+
+                # Delete folder if older than the cutoff date
+                if folder_date < cutoff_date:
+                    logging.info(f"Deleting old folder: {folder_name}")
+                    s3_objects = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=f"{s3_folder}/{folder_name}/")
+                    if 'Contents' in s3_objects:
+                        for obj in s3_objects['Contents']:
+                            s3.delete_object(Bucket=S3_BUCKET, Key=obj['Key'])
+                        logging.info(f"Deleted folder and its contents: {folder_name}")
+            except Exception as e:
+                logging.error(f"Error processing folder {folder_name}: {e}")
+
 
 def process_pod(pod_name):
     """Processes a single pod to copy tokens and upload them to S3."""
@@ -75,7 +85,7 @@ def process_pod(pod_name):
         subprocess.run(["kubectl", "cp", f"{NAMESPACE}/{pod_name}:{TOKENS_PATH}", temp_folder], check=True)
 
         # Upload the tokens folder to S3
-        current_date = datetime.now().strftime('%d-%m-%Y')
+        current_date = datetime.utcnow().strftime('%d-%m-%y-%H-%M-UTC')
         s3_path = f"{S3_BASE_FOLDER}/{S3_BASE_FOLDER}-{current_date}/{pod_name}-tokens/tokens/"
         upload_to_s3(temp_folder, s3_path)
 
@@ -110,3 +120,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
