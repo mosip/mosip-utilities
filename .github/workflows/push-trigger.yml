@@ -47,6 +47,9 @@ jobs:
           - SERVICE_LOCATION: 'openjdk/21-jdk'
             SERVICE_NAME: 'openjdk-21-jdk'
             BASE_IMAGE_BUILD: true
+          - SERVICE_LOCATION: 'softhsm-backup'
+            SERVICE_NAME: 'softhsm-backup'
+            BASE_IMAGE_BUILD: true
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
     uses: mosip/kattu/.github/workflows/docker-build.yml@develop
