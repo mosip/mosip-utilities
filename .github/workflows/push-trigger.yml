@@ -50,6 +50,9 @@ jobs:
           - SERVICE_LOCATION: 'softhsm-backup'
             SERVICE_NAME: 'softhsm-backup'
             BASE_IMAGE_BUILD: true
+          - SERVICE_LOCATION: 'postgres-backup'
+            SERVICE_NAME: 'postgres-backup'
+            BASE_IMAGE_BUILD: true
       fail-fast: false
     name: ${{ matrix.SERVICE_NAME }}
     uses: mosip/kattu/.github/workflows/docker-build.yml@develop
