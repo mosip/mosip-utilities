@@ -1,0 +1,8 @@
+io.mosip.idrepository.credentialsfeeder
+io.mosip.idrepository.credentialsfeeder.config
+io.mosip.idrepository.credentialsfeeder.constant
+io.mosip.idrepository.credentialsfeeder.entity
+io.mosip.idrepository.credentialsfeeder.listener
+io.mosip.idrepository.credentialsfeeder.logger
+io.mosip.idrepository.credentialsfeeder.repository
+io.mosip.idrepository.credentialsfeeder.step
