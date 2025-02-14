@@ -37,10 +37,11 @@ on:
       - 1.*
       - 0.*
       - develop
+      - MOSIP*
       - release*
     paths:
       - 'helm/**'
-
+      
 jobs:
   chart-lint-publish:
     uses: mosip/kattu/.github/workflows/chart-lint-publish.yml@master
