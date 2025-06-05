@@ -1,0 +1,47 @@
+name: Build and Deploy Backend
+
+on:
+  push:
+    branches: [ intern ]
+    paths:
+      - 'github-activity-tracker/backend/**'
+  pull_request:
+    branches: [ intern ]
+    paths:
+      - 'github-activity-tracker/backend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: |
+        cd github-activity-tracker/backend
+        npm install
+
+    - name: Package backend for Lambda
+      run: |
+        cd github-activity-tracker/backend
+        zip -r ../backend.zip .
+
+    - name: Configure AWS credentials
+      if: github.event_name == 'push' && github.ref == 'refs/heads/intern'
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Deploy to Lambda
+      if: github.event_name == 'push' && github.ref == 'refs/heads/intern'
+      run: |
+        aws lambda update-function-code --function-name github-activity-backend --zip-file fileb://github-activity-tracker/backend.zip

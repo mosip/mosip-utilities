@@ -1,5 +1,4 @@
 const express = require('express');
-const awsServerlessExpress = require('aws-serverless-express');
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -35,8 +34,7 @@ const pool = new Pool({
   port: RDS_PORT,
   database: RDS_DATABASE,
   user: RDS_USER,
-  password: RDS_PASSWORD,
-  ssl: { rejectUnauthorized: false } // Required for AWS RDS
+  password: RDS_PASSWORD
 });
 
 // Test database connection
@@ -115,7 +113,7 @@ const HEADERS = {
   'Accept': 'application/vnd.github.v3+json'
 };
 
-// Format date function
+// Format date function (unchanged)
 function formatDate(dateStr) {
   try {
     if (!dateStr) {
@@ -129,7 +127,7 @@ function formatDate(dateStr) {
   }
 }
 
-// Load repositories from config file
+// Load repositories from config file (unchanged)
 function loadRepositories() {
   const configFile = "config.properties";
   if (!fs.existsSync(configFile)) {
@@ -143,7 +141,7 @@ function loadRepositories() {
     .map(line => line.split('=')[0]);
 }
 
-// Get latest date
+// Get latest date (unchanged)
 async function getLatestDate(tableName, repoId, dateField) {
   const client = await pool.connect();
   try {
@@ -166,7 +164,7 @@ async function getLatestDate(tableName, repoId, dateField) {
   }
 }
 
-// Check rate limit
+// Check rate limit (unchanged)
 async function checkRateLimit() {
   try {
     const response = await axios.get("https://api.github.com/rate_limit", { headers: HEADERS });
@@ -182,7 +180,7 @@ async function checkRateLimit() {
   }
 }
 
-// Handle rate limit
+// Handle rate limit (unchanged)
 async function handleRateLimit() {
   const { remaining, resetTime } = await checkRateLimit();
   if (remaining !== null && remaining < 20) {
@@ -194,7 +192,7 @@ async function handleRateLimit() {
   return false;
 }
 
-// Fetch paginated data
+// Fetch paginated data (unchanged)
 async function fetchPaginatedData(url, params = {}, maxRetries = 5) {
   let items = [];
   let page = 1;
@@ -251,7 +249,7 @@ async function fetchPaginatedData(url, params = {}, maxRetries = 5) {
   return items;
 }
 
-// Get or create repository
+// Get or create repository (modified to include created_at)
 async function getOrCreateRepository(repoName) {
   const client = await pool.connect();
   try {
@@ -272,7 +270,7 @@ async function getOrCreateRepository(repoName) {
   }
 }
 
-// Delete old data
+// Delete old data (unchanged)
 async function deleteOldData(repoId) {
   const thirtyDaysAgo = DateTime.now().minus({ days: 30 }).toJSDate();
   const client = await pool.connect();
@@ -302,7 +300,7 @@ async function deleteOldData(repoId) {
   }
 }
 
-// Clean duplicates
+// Clean duplicates (unchanged)
 async function cleanDuplicateCommits(repoId) {
   console.log(`Cleaning duplicate commits for repo_id: ${repoId}`);
   const client = await pool.connect();
@@ -366,7 +364,7 @@ async function cleanDuplicatePRs(repoId) {
   }
 }
 
-// Fetch commits for branch
+// Fetch commits for branch (unchanged)
 async function fetchCommitsForBranch(branch, baseUrl, latestCommitDate, repoId) {
   const commitsUrl = `${baseUrl}/commits`;
   const sinceDate = new Date(Math.min(
@@ -387,7 +385,7 @@ async function fetchCommitsForBranch(branch, baseUrl, latestCommitDate, repoId) 
     }));
 }
 
-// Fetch reviews for PR
+// Fetch reviews for PR (unchanged)
 async function fetchReviewsForPR(pr, baseUrl, repoId) {
   const reviewsUrl = `${baseUrl}/pulls/${pr.number}/reviews`;
   const prReviews = await fetchPaginatedData(reviewsUrl);
@@ -416,7 +414,7 @@ async function fetchReviewsForPR(pr, baseUrl, repoId) {
   }
 }
 
-// Store repository data
+// Store repository data (unchanged)
 async function storeRepositoryData(repoName) {
   console.log(`Processing ${repoName}...`);
   const baseUrl = `https://api.github.com/repos/${repoName}`;
@@ -759,6 +757,7 @@ async function storeRepositoryData(repoName) {
 }
 
 // API Endpoints
+// API Endpoints
 app.get('/api/repositories', async (req, res) => {
   try {
     const result = await pool.query('SELECT id, name, created_at FROM repositories ORDER BY created_at DESC');
@@ -916,8 +915,8 @@ app.post('/api/addRepo', async (req, res) => {
   }
 });
 
-// Main initialization function
-async function initialize() {
+// Main function (modified to run on server start)
+async function startServer() {
   try {
     await initializeSchema();
     // Run initial data ingestion
@@ -929,24 +928,23 @@ async function initialize() {
         console.error(`Failed to process ${repo}: ${error.message}`);
       }
     }
+    // Start Express server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
   } catch (error) {
-    console.error('Initialization error:', error.message);
-    throw error;
+    console.error('Server startup error:', error.message);
+    process.exit(1);
   }
 }
 
-// Create the server for Lambda
-const server = awsServerlessExpress.createServer(app);
-
-// Lambda handler
-exports.handler = async (event, context) => {
-  // Ensure schema and initial data are set up
-  await initialize();
-  return awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
-};
+// Run the server
+startServer();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received. Closing pool...');
+  console.log('SIGTERM received. Closing server...');
   await pool.end();
+  process.exit(0);
 });
