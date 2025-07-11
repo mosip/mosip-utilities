@@ -8,9 +8,8 @@ from mosip_auth_sdk.otp_generate import initialize_authenticator
 
 OTP_DATA_FILE = "examples/test_cases/otp_data.json"
 CONFIG_PATH = "./settings.toml"
-
 OTP_DATA_FILE = "./user_data.json"
-CONFIG_PATH = "./settings.toml"
+
 
 def main():
 

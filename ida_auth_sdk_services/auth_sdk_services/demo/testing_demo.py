@@ -4,7 +4,7 @@ from mosip_auth_sdk.demo_auth import load_config
 
 
 
-USER_DATA="./user_data.json"
+USER_DATA_PATH = "./user_data.json"
 OTP_VALUES="./otp_data.json"
 CONFIG_PATH="./settings.toml"
 
