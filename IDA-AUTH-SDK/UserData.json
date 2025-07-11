@@ -1,0 +1,13 @@
+{
+  "individual_id": "2139125329",
+  "individual_id_type": "UIN",
+  "email": true,
+  "phone": true,
+  "language": "eng",
+
+  "name": "TEST_FULLNAMEeng",
+  "gender": "MLE",
+  "dob": "1992/04/15",
+  "email_id": "IdRepository_AddIdentity_UpdateCount_Vid_smoke_Pos@mosip.net"
+
+}
