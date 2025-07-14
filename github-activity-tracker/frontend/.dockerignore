@@ -1,0 +1,1 @@
+node_modules dist .env Dockerfile nginx.conf .git .gitignore *.md

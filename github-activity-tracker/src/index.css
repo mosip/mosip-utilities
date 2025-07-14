@@ -1,0 +1,20 @@
+/* @tailwind base; */
+@import 'tailwindcss/base';
+/* @tailwind components; */
+@import 'tailwindcss/components';
+/* @tailwind utilities; */
+@import 'tailwindcss/utilities';
+
+:root {
+  background-color: #f3f4f6;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #f3f4f6;
+}
+
+#root {
+  min-height: 100vh;
+}
