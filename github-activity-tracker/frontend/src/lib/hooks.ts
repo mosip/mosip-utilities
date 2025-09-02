@@ -79,6 +79,7 @@ export function useGitHubActivity(
           state: activity.state,
         }));
 
+        console.log("useGitHubActivity::" + mappedActivities);
         // Sort activities by date (latest first)
         setActivities(
           mappedActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
