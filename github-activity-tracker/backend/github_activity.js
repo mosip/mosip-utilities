@@ -7,6 +7,8 @@ const dotenv = require('dotenv');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 
+const nowIso = () => new Date().toISOString();
+
 // Load environment variables
 dotenv.config();
 
@@ -52,6 +54,18 @@ pool.connect()
 // Initialize Express app
 const app = express();
 app.use(express.json());
+
+// Adding CORS middleware to handle requests from the specific frontend origin
+// CORS (Express owns CORS)
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] Registered routes:`, app._router.stack
+    .filter(r => r.route)
+    .map(r => `${r.route.path} (${Object.keys(r.route.methods).join(',')})`));
+  console.log(`[${new Date().toISOString()}] Received ${req.method} request to ${req.url}, originalUrl: ${req.originalUrl}, origin: ${req.headers.origin || '(no origin)'}`);
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
 
 // Initialize database schema
 async function initializeSchema() {
@@ -111,9 +125,13 @@ async function initializeSchema() {
 
 // GitHub API Headers
 const HEADERS = {
-  'Authorization': `token ${GITHUB_TOKEN}`,
-  'Accept': 'application/vnd.github.v3+json'
+  "Accept": "application/vnd.github+json",
+  "User-Agent": "github-activity-tracker/1.0",
+  "X-GitHub-Api-Version": "2022-11-28",
+  "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`
 };
+
+const GRAPHQL_URL = "https://api.github.com/graphql";
 
 // Format date function
 function formatDate(dateStr) {
@@ -182,74 +200,37 @@ async function checkRateLimit() {
   }
 }
 
-// Handle rate limit
+let rateLimitCache = { remaining: null, resetTime: null, lastChecked: 0 };
+
 async function handleRateLimit() {
-  const { remaining, resetTime } = await checkRateLimit();
-  if (remaining !== null && remaining < 20) {
-    const waitTime = Math.max(resetTime - Math.floor(Date.now() / 1000), 0) + 5;
-    console.log(`Rate limit low (${remaining} remaining). Waiting ${waitTime} seconds...`);
-    await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+  const now = Date.now();
+  // Refresh cache every 30 seconds or if reset time has passed
+  if (now - rateLimitCache.lastChecked > 30000 || (rateLimitCache.resetTime && now >= rateLimitCache.resetTime * 1000)) {
+    try {
+      const response = await axios.get("https://api.github.com/rate_limit", { headers: HEADERS });
+      rateLimitCache = {
+        remaining: parseInt(response.data.resources.core.remaining, 10),
+        resetTime: parseInt(response.data.resources.core.reset, 10),
+        lastChecked: now
+      };
+      console.log(`[${nowIso()}] Rate limit updated: ${rateLimitCache.remaining} remaining, reset at ${new Date(rateLimitCache.resetTime * 1000).toISOString()}`);
+    } catch (error) {
+      console.error(`[${nowIso()}] Error checking rate limit: ${error.message}`);
+      rateLimitCache = { remaining: null, resetTime: null, lastChecked: now };
+    }
+  }
+
+  if (rateLimitCache.remaining !== null && rateLimitCache.remaining < 20) {
+    const waitTime = Math.max(rateLimitCache.resetTime * 1000 - now, 0) + 5000;
+    console.log(`[${nowIso()}] Rate limit low (${rateLimitCache.remaining} remaining). Waiting ${Math.ceil(waitTime / 1000)}s...`);
+    await sleep(waitTime);
+    rateLimitCache.lastChecked = 0; // Force refresh after wait
     return true;
   }
   return false;
 }
 
-// Fetch paginated data
-async function fetchPaginatedData(url, params = {}, maxRetries = 5) {
-  let items = [];
-  let page = 1;
-  let retryCount = 0;
-  let retryDelay = 5000;
-  while (true) {
-    const queryParams = { ...params, page, per_page: 100 };
-    try {
-      const response = await axios.get(url, { headers: HEADERS, params: queryParams });
-      console.log(`Rate limit remaining: ${response.headers['x-ratelimit-remaining'] || 'N/A'}`);
-      if (response.status === 403 && response.headers['x-ratelimit-remaining'] && parseInt(response.headers['x-ratelimit-remaining']) === 0) {
-        const resetTime = parseInt(response.headers['x-ratelimit-reset'] || 0);
-        const waitTime = Math.max(resetTime - Math.floor(Date.now() / 1000), 0) + 5;
-        console.log(`Rate limit reached. Waiting ${waitTime} seconds...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-        continue;
-      }
-      if (response.status !== 200) {
-        retryCount++;
-        if (retryCount > maxRetries) {
-          console.log(`Max retries reached for ${url}. Last status: ${response.status}`);
-          break;
-        }
-        console.log(`Error fetching ${url}: ${response.status}, retry ${retryCount}/${maxRetries} in ${retryDelay/1000} seconds...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        retryDelay *= 2;
-        continue;
-      }
-      const newItems = response.data;
-      console.log(`Fetched ${newItems.length} items from ${url}, page ${page}`);
-      if (!newItems || newItems.length === 0) {
-        console.log(`Completed ${page} pages for ${url}`);
-        break;
-      }
-      items = items.concat(newItems);
-      if (newItems.length < 100) {
-        console.log(`Completed ${page} pages for ${url}`);
-        break;
-      }
-      page += 1;
-      retryCount = 0;
-      retryDelay = 5000;
-    } catch (error) {
-      retryCount++;
-      if (retryCount > maxRetries) {
-        console.log(`Max retries reached for ${url} due to exception: ${error.message}`);
-        break;
-      }
-      console.log(`Exception fetching ${url}: ${error.message}, retry ${retryCount}/${maxRetries} in ${retryDelay/1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
-      retryDelay *= 2;
-    }
-  }
-  return items;
-}
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Get or create repository
 async function getOrCreateRepository(repoName) {
@@ -366,513 +347,850 @@ async function cleanDuplicatePRs(repoId) {
   }
 }
 
-// Fetch commits for branch
-async function fetchCommitsForBranch(branch, baseUrl, latestCommitDate, repoId) {
-  const commitsUrl = `${baseUrl}/commits`;
-  const sinceDate = new Date(Math.min(
-    latestCommitDate.getTime(),
-    DateTime.now().minus({ days: 30 }).toJSDate().getTime()
-  ));
-  const params = { sha: branch.name, since: sinceDate.toISOString() };
-  const commits = await fetchPaginatedData(commitsUrl, params);
-  return commits
-    .filter(c => new Date(formatDate(c.commit.author.date)) >= sinceDate)
-    .map(c => ({
-      repository_id: repoId,
-      message: c.commit.message,
-      author: c.commit.author.name,
-      committed_at: formatDate(c.commit.author.date),
-      branch: branch.name,
-      created_at: DateTime.now().toUTC().toISO({ suppressMilliseconds: true })
-    }));
+async function getLatestTimestamps(repoId) {
+  const [commitAt, prAt, issueAt, reviewAt] = await Promise.all([
+    getLatestDate("commits", repoId, "committed_at"),
+    getLatestDate("pull_requests", repoId, "created_at"),
+    getLatestDate("issues", repoId, "created_at"),
+    getLatestDate("reviews", repoId, "created_at"),
+  ]);
+  return { commitAt, prAt, issueAt, reviewAt };
 }
 
-// Fetch reviews for PR
-async function fetchReviewsForPR(pr, baseUrl, repoId) {
-  const reviewsUrl = `${baseUrl}/pulls/${pr.number}/reviews`;
-  const prReviews = await fetchPaginatedData(reviewsUrl);
+async function insertCommits(repoId, commitData) {
+  if (!commitData.length) return 0;
   const client = await pool.connect();
   try {
-    const result = await client.query(
-      `SELECT review_id
-       FROM reviews
-       WHERE repository_id = $1 AND pr_number = $2`,
-      [repoId, pr.number]
+    const existing = await client.query(
+      `SELECT repository_id, message, author, committed_at, branch
+       FROM commits WHERE repository_id = $1`,
+      [repoId]
     );
-    const existingReviewIds = new Set(result.rows.map(row => String(row.review_id)));
-    const newReviews = prReviews.filter(r => !existingReviewIds.has(String(r.id)));
-    const reviewsData = newReviews.map(r => ({
-      repository_id: repoId,
-      comment: r.body || "No comment",
-      author: r.user.login,
-      created_at: formatDate(r.submitted_at),
-      review_id: String(r.id),
-      pr_number: pr.number
-    }));
-    console.log(`Fetched ${reviewsData.length} new reviews for PR #${pr.number} (filtered from ${prReviews.length} total)`);
-    return reviewsData;
+    const seen = new Set(
+      existing.rows.map(
+        c => `${c.repository_id}|${c.message}|${c.author}|${c.committed_at}|${c.branch}`
+      )
+    );
+
+    const fresh = commitData.filter(c => {
+      const k = `${c.repository_id}|${c.message}|${c.author}|${c.committed_at}|${c.branch}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (!fresh.length) return 0;
+
+    try {
+      await client.query(
+        `INSERT INTO commits (repository_id, message, author, committed_at, branch, created_at)
+         SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::timestamp[])`,
+        [
+          fresh.map(x => x.repository_id),
+          fresh.map(x => x.message),
+          fresh.map(x => x.author),
+          fresh.map(x => x.committed_at),
+          fresh.map(x => x.branch),
+          fresh.map(x => x.created_at),
+        ]
+      );
+      return fresh.length;
+    } catch (e) {
+      // fallback row-by-row
+      let ok = 0;
+      for (const c of fresh) {
+        try {
+          await client.query(
+            `INSERT INTO commits (repository_id, message, author, committed_at, branch, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [c.repository_id, c.message, c.author, c.committed_at, c.branch, c.created_at]
+          );
+          ok++;
+        } catch {}
+      }
+      return ok;
+    }
   } finally {
     client.release();
   }
 }
 
-// Store repository data
-async function storeRepositoryData(repoName) {
-  console.log(`Processing ${repoName}...`);
-  const baseUrl = `https://api.github.com/repos/${repoName}`;
+async function insertPRs(repoId, prRows) {
+  if (!prRows.length) return 0;
+  const client = await pool.connect();
   try {
-    const repoId = (await getOrCreateRepository(repoName)).id;
-    console.log(`Repository ID: ${repoId}`);
+    const exist = await client.query(
+      `SELECT number FROM pull_requests WHERE repository_id = $1 AND number = ANY($2)`,
+      [repoId, prRows.map(p => p.number)]
+    );
+    const existingNums = new Set(exist.rows.map(r => r.number));
+    const fresh = prRows.filter(p => !existingNums.has(p.number));
+    if (!fresh.length) return 0;
+
+    try {
+      await client.query(
+        `INSERT INTO pull_requests (repository_id, title, author, created_at, state, number, created_at_internal)
+         SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::int[], $7::timestamp[])`,
+        [
+          fresh.map(p => p.repository_id),
+          fresh.map(p => p.title),
+          fresh.map(p => p.author),
+          fresh.map(p => p.created_at),
+          fresh.map(p => p.state),
+          fresh.map(p => p.number),
+          fresh.map(p => p.created_at_internal),
+        ]
+      );
+      return fresh.length;
+    } catch (e) {
+      let ok = 0;
+      for (const p of fresh) {
+        try {
+          await client.query(
+            `INSERT INTO pull_requests (repository_id, title, author, created_at, state, number, created_at_internal)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [p.repository_id, p.title, p.author, p.created_at, p.state, p.number, p.created_at_internal]
+          );
+          ok++;
+        } catch {}
+      }
+      return ok;
+    }
+  } finally {
+    client.release();
+  }
+}
+
+async function insertIssues(repoId, issueRows) {
+  if (!issueRows.length) return 0;
+  const client = await pool.connect();
+  try {
+    const exist = await client.query(
+      `SELECT number FROM issues WHERE repository_id = $1 AND number = ANY($2)`,
+      [repoId, issueRows.map(i => i.number)]
+    );
+    const existing = new Set(exist.rows.map(r => r.number));
+    const fresh = issueRows.filter(i => !existing.has(i.number));
+    if (!fresh.length) return 0;
+
+    try {
+      await client.query(
+        `INSERT INTO issues (repository_id, title, author, created_at, number)
+         SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::int[])`,
+        [
+          fresh.map(i => i.repository_id),
+          fresh.map(i => i.title),
+          fresh.map(i => i.author),
+          fresh.map(i => i.created_at),
+          fresh.map(i => i.number),
+        ]
+      );
+      return fresh.length;
+    } catch (e) {
+      let ok = 0;
+      for (const i of fresh) {
+        try {
+          await client.query(
+            `INSERT INTO issues (repository_id, title, author, created_at, number)
+             VALUES ($1,$2,$3,$4,$5)`,
+            [i.repository_id, i.title, i.author, i.created_at, i.number]
+          );
+          ok++;
+        } catch {}
+      }
+      return ok;
+    }
+  } finally {
+    client.release();
+  }
+}
+
+async function insertReviewsBatched(rows, batchSize = 20) {
+  if (!rows.length) return 0;
+  const client = await pool.connect();
+  let total = 0;
+  try {
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      try {
+        await client.query(
+          `INSERT INTO reviews (repository_id, comment, author, created_at, review_id, pr_number)
+           SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::int[])
+           ON CONFLICT (review_id) DO NOTHING`,
+          [
+            batch.map(r => r.repository_id),
+            batch.map(r => r.comment),
+            batch.map(r => r.author),
+            batch.map(r => r.created_at),
+            batch.map(r => r.review_id),
+            batch.map(r => r.pr_number),
+          ]
+        );
+        total += batch.length;
+      } catch (e) {
+        // fallback per-row
+        for (const r of batch) {
+          try {
+            await client.query(
+              `INSERT INTO reviews (repository_id, comment, author, created_at, review_id, pr_number)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT (review_id) DO NOTHING`,
+              [r.repository_id, r.comment, r.author, r.created_at, r.review_id, r.pr_number]
+            );
+            total++;
+          } catch {}
+        }
+      }
+    }
+    return total;
+  } finally {
+    client.release();
+  }
+}
+
+async function queryGraphQL(query, variables = {}) {
+  const t0 = Date.now();
+  console.log(`[${nowIso()}] GraphQL query: ${query.slice(0, 100)}...`, variables);
+
+  try {
+    const response = await axios.post(
+      GRAPHQL_URL,
+      { query, variables },
+      { headers: HEADERS }
+    );
+
+    const remaining = response.headers["x-ratelimit-remaining"] ?? "N/A";
+    const resetTime = parseInt(response.headers["x-ratelimit-reset"] || "0", 10);
+    console.log(`[${nowIso()}] GraphQL rate limit: ${remaining}, took ${Date.now() - t0}ms`);
+
+    if (response.status !== 200) {
+      throw new Error(`GraphQL request failed: ${response.status}`);
+    }
+
+    if (response.data.errors) {
+      throw new Error(`GraphQL errors: ${JSON.stringify(response.data.errors)}`);
+    }
+
+    return response.data.data;
+  } catch (error) {
+    console.error(`[${nowIso()}] GraphQL error: ${error.message}`);
+    throw error;
+  }
+}
+
+// Note: since is GitTimestamp
+const REPO_QUERY = `
+query(
+  $owner: String!,
+  $name: String!,
+  $since: GitTimestamp,
+  $afterCommits: String,
+  $afterPRs: String,
+  $afterIssues: String,
+  $afterReviews: String
+) {
+  repository(owner: $owner, name: $name) {
+    id
+    nameWithOwner
+
+    # include the default branch name to tag those commits
+    defaultBranchRef {
+      name
+      target {
+        ... on Commit {
+          history(first: 100, since: $since, after: $afterCommits) {
+            nodes {
+              oid
+              message
+              author { name user { login } }
+              committedDate
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+
+    # Heads (branches). We'll filter in code for develop + release*
+    refs(refPrefix: "refs/heads/", first: 50) {
+      nodes {
+        name
+        target {
+          ... on Commit {
+            history(first: 100, since: $since) {
+              nodes {
+                oid
+                message
+                author { name user { login } }
+                committedDate
+              }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }
+      }
+    }
+
+    pullRequests(first: 100, states: [OPEN, CLOSED, MERGED], after: $afterPRs) {
+      nodes {
+        number
+        title
+        author { login }
+        createdAt
+        state
+        reviews(first: 100, after: $afterReviews) {
+          nodes {
+            id
+            body
+            author { login }
+            submittedAt
+            state
+            commit { oid }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+
+    issues(first: 100, states: [OPEN, CLOSED], after: $afterIssues) {
+      nodes {
+        number
+        title
+        author { login }
+        createdAt
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+  rateLimit { remaining resetAt }
+}
+`;
+
+async function storeRepositoryData(repoName) {
+  console.log(`[${nowIso()}] Processing ${repoName}...`);
+  const [owner, name] = repoName.split('/');
+
+  try {
+    const repo = await getOrCreateRepository(repoName);
+    const repoId = repo.id;
+    console.log(`[${nowIso()}] Repository ID: ${repoId}`);
+
+    // Hygiene
     await deleteOldData(repoId);
     await cleanDuplicateCommits(repoId);
     await cleanDuplicateReviews(repoId);
     await cleanDuplicatePRs(repoId);
-    const latestCommitDate = await getLatestDate("commits", repoId, "committed_at");
-    const latestPrDate = await getLatestDate("pull_requests", repoId, "created_at");
-    const latestIssueDate = await getLatestDate("issues", repoId, "created_at");
-    const latestReviewDate = await getLatestDate("reviews", repoId, "created_at");
-    // Process commits
-    console.log(`Starting commits at ${Date.now() / 1000}`);
-    const branchesUrl = `${baseUrl}/branches`;
-    const branches = await fetchPaginatedData(branchesUrl);
-    console.log(`Processing branches: ${branches.map(b => b.name).join(', ')}`);
-    const commitDataList = await Promise.all(
-      branches.map(branch => fetchCommitsForBranch(branch, baseUrl, latestCommitDate, repoId))
-    );
-    const commitData = commitDataList.flat();
-    if (commitData.length > 0) {
-      const client = await pool.connect();
-      try {
-        const existingCommits = await client.query(
-          `SELECT repository_id, message, author, committed_at, branch
-           FROM commits
-           WHERE repository_id = $1`,
-          [repoId]
-        );
-        const existingKeys = new Set(
-          existingCommits.rows.map(c => `${c.repository_id}|${c.message}|${c.author}|${c.committed_at}|${c.branch}`)
-        );
-        const newCommitData = commitData.filter(commit => {
-          const key = `${commit.repository_id}|${commit.message}|${commit.author}|${commit.committed_at}|${commit.branch}`;
-          if (existingKeys.has(key)) {
-            console.log(`Skipping duplicate commit: ${key}`);
-            return false;
-          }
-          existingKeys.add(key);
-          return true;
-        });
-        if (newCommitData.length > 0) {
-          try {
-            await client.query(
-              `INSERT INTO commits (repository_id, message, author, committed_at, branch, created_at)
-               SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::timestamp[])`,
-              [
-                newCommitData.map(c => c.repository_id),
-                newCommitData.map(c => c.message),
-                newCommitData.map(c => c.author),
-                newCommitData.map(c => c.committed_at),
-                newCommitData.map(c => c.branch),
-                newCommitData.map(c => c.created_at)
-              ]
-            );
-            console.log(`Stored ${newCommitData.length} new commits at ${Date.now() / 1000}`);
-          } catch (error) {
-            console.error(`Error inserting commits: ${error.message}`);
-            let successfulInserts = 0;
-            for (const commit of newCommitData) {
-              try {
-                await client.query(
-                  `INSERT INTO commits (repository_id, message, author, committed_at, branch, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6)`,
-                  [
-                    commit.repository_id,
-                    commit.message,
-                    commit.author,
-                    commit.committed_at,
-                    commit.branch,
-                    commit.created_at
-                  ]
-                );
-                successfulInserts++;
-              } catch (innerError) {
-                console.error(`Error inserting individual commit: ${innerError.message}`);
-              }
-            }
-            console.log(`Individually inserted ${successfulInserts}/${newCommitData.length} commits`);
-          }
-        }
-      } finally {
-        client.release();
+
+    // Get latest timestamps
+    const { commitAt, prAt, issueAt, reviewAt } = await getLatestTimestamps(repoId);
+    const since = new Date(Math.min(
+      commitAt.getTime(),
+      prAt.getTime(),
+      issueAt.getTime(),
+      reviewAt.getTime(),
+      Date.now() - 1 * 24 * 3600 * 1000
+    )).toISOString();
+
+    let commitRows = [];
+    let prRows = [];
+    let issueRows = [];
+    let reviewRows = [];
+
+    let afterCommits, afterPRs, afterIssues, afterReviews;
+    let hasNextPage = true;
+
+    while (hasNextPage) {
+      await handleRateLimit(); // Check rate limit before each query
+
+      const data = await queryGraphQL(REPO_QUERY, {
+        owner,
+        name,
+        since,
+        afterCommits,
+        afterPRs,
+        afterIssues,
+        afterReviews
+      });
+
+      const repoData = data.repository;
+      if (!repoData) {
+        throw new Error(`Repository ${repoName} not found or inaccessible`);
       }
-    }
-    console.log(`Finished commits at ${Date.now() / 1000}`);
-    // Process pull requests
-    console.log(`Starting PRs at ${Date.now() / 1000}`);
-    const prStates = ["open", "closed"];
-    for (const state of prStates) {
-      const prsUrl = `${baseUrl}/pulls`;
-      const sinceDate = new Date(Math.min(
-        latestPrDate.getTime(),
-        DateTime.now().minus({ days: 30 }).toJSDate().getTime()
-      ));
-      const params = { state, sort: "updated", direction: "desc" };
-      const prs = await fetchPaginatedData(prsUrl, params);
-      const filteredPrs = prs.filter(p => new Date(formatDate(p.created_at)) >= sinceDate);
-      console.log(`Filtered from ${prs.length} to ${filteredPrs.length} ${state} PRs based on date`);
-      const prData = filteredPrs.map(p => ({
+
+      // Process commits
+      const branches = (repoData.branches?.nodes || []).filter(branch =>
+          branch.name === "develop"
+      );
+      
+      const defaultBranchCommits = repoData.defaultBranchRef?.target?.history?.nodes || [];
+      const branchCommits = branches.flatMap(b => b.target?.history?.nodes || []);
+      const allCommits = [...defaultBranchCommits, ...branchCommits].map(c => ({
+        repository_id: repoId,
+        message: c.message || '',
+        author: c.author?.name || c.author?.user?.login || 'unknown',
+        committed_at: formatDate(c.committedDate),
+        branch: branches.find(b => b.target?.history?.nodes.includes(c))?.name || repoData.defaultBranchRef?.name,
+        created_at: nowIso()
+      }));
+      commitRows.push(...allCommits);
+
+      // Process PRs
+      const prs = repoData.pullRequests?.nodes || [];
+      prRows.push(...prs.map(p => ({
         repository_id: repoId,
         title: p.title,
-        author: p.user.login,
-        created_at: formatDate(p.created_at),
+        author: p.author?.login || 'unknown',
+        created_at: formatDate(p.createdAt),
         state: p.state,
         number: p.number,
-        created_at_internal: DateTime.now().toUTC().toISO({ suppressMilliseconds: true })
+        created_at_internal: nowIso()
+      })));
+
+      // Process reviews
+      const reviews = prs.flatMap(p => p.reviews?.nodes || []).map(r => ({
+        repository_id: repoId,
+        comment: r.body || 'No comment',
+        author: r.author?.login || 'unknown',
+        created_at: formatDate(r.submittedAt),
+        review_id: r.id,
+        pr_number: prs.find(p => p.reviews?.nodes.includes(r))?.number,
       }));
-      if (prData.length > 0) {
-        const client = await pool.connect();
-        try {
-          const existingPrs = await client.query(
-            `SELECT repository_id, number
-             FROM pull_requests
-             WHERE repository_id = $1 AND number = ANY($2)`,
-            [repoId, prData.map(p => p.number)]
-          );
-          const existingPrNumbers = new Set(existingPrs.rows.map(pr => pr.number));
-          const newPrData = prData.filter(pr => !existingPrNumbers.has(pr.number));
-          if (newPrData.length > 0) {
-            try {
-              await client.query(
-                `INSERT INTO pull_requests (repository_id, title, author, created_at, state, number, created_at_internal)
-                 SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::int[], $7::timestamp[])`,
-                [
-                  newPrData.map(p => p.repository_id),
-                  newPrData.map(p => p.title),
-                  newPrData.map(p => p.author),
-                  newPrData.map(p => p.created_at),
-                  newPrData.map(p => p.state),
-                  newPrData.map(p => p.number),
-                  newPrData.map(p => p.created_at_internal)
-                ]
-              );
-              console.log(`Stored ${newPrData.length} new ${state} PRs`);
-            } catch (error) {
-              console.error(`Error inserting ${state} PRs: ${error.message}`);
-              let successfulInserts = 0;
-              for (const pr of newPrData) {
-                try {
-                  await client.query(
-                    `INSERT INTO pull_requests (repository_id, title, author, created_at, state, number, created_at_internal)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [
-                      pr.repository_id,
-                      pr.title,
-                      pr.author,
-                      pr.created_at,
-                      pr.state,
-                      pr.number,
-                      pr.created_at_internal
-                    ]
-                  );
-                  successfulInserts++;
-                } catch (innerError) {
-                  console.error(`Error inserting individual PR: ${innerError.message}`);
-                }
-              }
-              console.log(`Individually inserted ${successfulInserts}/${newPrData.length} ${state} PRs`);
-            }
-          } else {
-            console.log(`No new ${state} PRs to store after filtering duplicates`);
-          }
-        } finally {
-          client.release();
-        }
-      } else {
-        console.log(`No ${state} PRs to store after date filtering`);
-      }
-    }
-    console.log(`Finished PRs at ${Date.now() / 1000}`);
-    // Process issues
-    console.log(`Starting issues at ${Date.now() / 1000}`);
-    const sinceIssueDate = new Date(Math.min(
-      latestIssueDate.getTime(),
-      DateTime.now().minus({ days: 30 }).toJSDate().getTime()
-    ));
-    const issuesUrl = `${baseUrl}/issues`;
-    const issueParams = { sort: "updated", direction: "desc", since: sinceIssueDate.toISOString() };
-    const issues = await fetchPaginatedData(issuesUrl, issueParams);
-    const issueData = issues
-      .filter(i => !i.pull_request)
-      .map(i => ({
+      reviewRows.push(...reviews);
+
+      // Process issues
+      const issues = repoData.issues?.nodes || [];
+      issueRows.push(...issues.map(i => ({
         repository_id: repoId,
         title: i.title,
-        author: i.user.login,
-        created_at: formatDate(i.created_at),
+        author: i.author?.login || 'unknown',
+        created_at: formatDate(i.createdAt),
         number: i.number
-      }));
-    if (issueData.length > 0) {
-      const client = await pool.connect();
-      try {
-        const existingIssues = await client.query(
-          `SELECT repository_id, number
-           FROM issues
-           WHERE repository_id = $1 AND number = ANY($2)`,
-          [repoId, issueData.map(i => i.number)]
-        );
-        const existingIssueNumbers = new Set(existingIssues.rows.map(issue => issue.number));
-        const newIssueData = issueData.filter(issue => !existingIssueNumbers.has(issue.number));
-        if (newIssueData.length > 0) {
-          try {
-            await client.query(
-              `INSERT INTO issues (repository_id, title, author, created_at, number)
-               SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::int[])`,
-              [
-                newIssueData.map(i => i.repository_id),
-                newIssueData.map(i => i.title),
-                newIssueData.map(i => i.author),
-                newIssueData.map(i => i.created_at),
-                newIssueData.map(i => i.number)
-              ]
-            );
-            console.log(`Stored ${newIssueData.length} new issues`);
-          } catch (error) {
-            console.error(`Error inserting issues: ${error.message}`);
-            let successfulInserts = 0;
-            for (const issue of newIssueData) {
-              try {
-                await client.query(
-                  `INSERT INTO issues (repository_id, title, author, created_at, number)
-                   VALUES ($1, $2, $3, $4, $5)`,
-                  [
-                    issue.repository_id,
-                    issue.title,
-                    issue.author,
-                    issue.created_at,
-                    issue.number
-                  ]
-                );
-                successfulInserts++;
-              } catch (innerError) {
-                console.error(`Error inserting individual issue: ${innerError.message}`);
-              }
-            }
-            console.log(`Individually inserted ${successfulInserts}/${newIssueData.length} issues`);
-          }
-        } else {
-          console.log("No new issues to store after filtering duplicates");
-        }
-      } finally {
-        client.release();
-      }
-    }
-    console.log(`Finished issues at ${Date.now() / 1000}`);
-    // Process reviews
-    console.log(`Starting reviews at ${Date.now() / 1000}`);
-    const sinceReviewDate = new Date(Math.min(
-      latestReviewDate.getTime(),
-      DateTime.now().minus({ days: 30 }).toJSDate().getTime()
-    ));
-    const recentPrsOpen = await fetchPaginatedData(`${baseUrl}/pulls?state=open&sort=updated&direction=desc`);
-    const recentPrsClosed = await fetchPaginatedData(`${baseUrl}/pulls?state=closed&sort=updated&direction=desc`);
-    const filteredPrsClosed = recentPrsClosed.filter(
-      pr => new Date(formatDate(pr.updated_at)) >= sinceReviewDate
-    );
-    const allRecentPrs = [...recentPrsOpen, ...filteredPrsClosed];
-    console.log(
-      `Found ${allRecentPrs.length} recent PRs for review processing ` +
-      `(${recentPrsOpen.length} open, ${filteredPrsClosed.length} recently closed)`
-    );
-    const batchSize = 5;
-    const allReviewData = [];
-    for (let i = 0; i < allRecentPrs.length; i += batchSize) {
-      const batchPrs = allRecentPrs.slice(i, i + batchSize);
-      console.log(
-        `Processing reviews for PR batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allRecentPrs.length / batchSize)} ` +
-        `(PRs #${batchPrs.map(pr => pr.number).join(', ')})`
+      })));
+
+      // Update pagination cursors
+      hasNextPage = (
+        repoData.defaultBranchRef?.target?.history?.pageInfo?.hasNextPage ||
+        branches.some(b => b.target?.history?.pageInfo?.hasNextPage) ||
+        repoData.pullRequests?.pageInfo?.hasNextPage ||
+        repoData.issues?.pageInfo?.hasNextPage ||
+        prs.some(p => p.reviews?.pageInfo?.hasNextPage)
       );
-      await handleRateLimit();
-      const batchReviews = await Promise.all(
-        batchPrs.map(pr => fetchReviewsForPR(pr, baseUrl, repoId))
-      );
-      allReviewData.push(...batchReviews.flat());
+      afterCommits = repoData.defaultBranchRef?.target?.history?.pageInfo?.endCursor || afterCommits;
+      afterPRs = repoData.pullRequests?.pageInfo?.endCursor || afterPRs;
+      afterIssues = repoData.issues?.pageInfo?.endCursor || afterIssues;
+      afterReviews = prs.find(p => p.reviews?.pageInfo?.hasNextPage)?.reviews?.pageInfo?.endCursor || afterReviews;
+
+      console.log(`[${nowIso()}] Fetched page for ${repoName}: ${allCommits.length} commits, ${prs.length} PRs, ${issues.length} issues, ${reviews.length} reviews`);
     }
-    console.log(`Total new reviews fetched across all PRs: ${allReviewData.length}`);
-    if (allReviewData.length > 0) {
-      const insertBatchSize = 20;
-      const client = await pool.connect();
-      try {
-        for (let j = 0; j < allReviewData.length; j += insertBatchSize) {
-          const batch = allReviewData.slice(j, j + insertBatchSize);
-          const batchNum = Math.floor(j / insertBatchSize) + 1;
-          const totalBatches = Math.ceil(allReviewData.length / insertBatchSize);
-          console.log(`Inserting review batch ${batchNum}/${totalBatches} with ${batch.length} reviews`);
-          try {
-            await client.query(
-              `INSERT INTO reviews (repository_id, comment, author, created_at, review_id, pr_number)
-               SELECT * FROM UNNEST ($1::int[], $2::text[], $3::text[], $4::timestamp[], $5::text[], $6::int[])`,
-              [
-                batch.map(r => r.repository_id),
-                batch.map(r => r.comment),
-                batch.map(r => r.author),
-                batch.map(r => r.created_at),
-                batch.map(r => r.review_id),
-                batch.map(r => r.pr_number)
-              ]
-            );
-            console.log(`Successfully inserted review batch ${batchNum}/${totalBatches}`);
-          } catch (error) {
-            console.error(`Error inserting review batch ${batchNum}: ${error.message}`);
-            let successfulInserts = 0;
-            for (const review of batch) {
-              try {
-                await client.query(
-                  `INSERT INTO reviews (repository_id, comment, author, created_at, review_id, pr_number)
-                   VALUES ($1, $2, $3, $4, $5, $6)`,
-                  [
-                    review.repository_id,
-                    review.comment,
-                    review.author,
-                    review.created_at,
-                    review.review_id,
-                    review.pr_number
-                  ]
-                );
-                successfulInserts++;
-              } catch (innerError) {
-                console.error(`Error inserting individual review: ${innerError.message}`);
-              }
-            }
-            console.log(`Individually inserted ${successfulInserts}/${batch.length} reviews`);
-          }
-        }
-      } finally {
-        client.release();
-      }
-    } else {
-      console.log("No new reviews to store");
-    }
-    console.log(`Finished reviews at ${Date.now() / 1000}`);
-    console.log(`✅ Processed ${repoName}`);
-  } catch (error) {
-    console.error(`❌ Error processing ${repoName}: ${error.message}`);
-    console.error(error.stack);
+
+    // Insert data
+    const insertedCommits = await insertCommits(repoId, commitRows);
+    const insertedPRs = await insertPRs(repoId, prRows);
+    const insertedIssues = await insertIssues(repoId, issueRows);
+    const insertedReviews = await insertReviewsBatched(reviewRows);
+
+    console.log(`[${nowIso()}] Inserted for ${repoName}: ${insertedCommits} commits, ${insertedPRs} PRs, ${insertedIssues} issues, ${insertedReviews} reviews`);
+    console.log(`[${nowIso()}] ✅ Processed ${repoName}`);
+  } catch (err) {
+    console.error(`[${nowIso()}] ❌ Error processing ${repoName}: ${err.message}`);
+    throw err;
   }
 }
 
-// API Endpoints
+// Tiny concurrency limiter (like p-limit but inline)
+function createLimiter(concurrency = 4) {
+  let active = 0;
+  const queue = [];
+  const next = () => {
+    if (active >= concurrency || queue.length === 0) return;
+    active++;
+    const { fn, resolve, reject } = queue.shift();
+    fn().then(resolve, reject).finally(() => {
+      active--;
+      next();
+    });
+  };
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({ fn, resolve, reject });
+    next();
+  });
+}
+
+// Retry wrapper with exponential backoff + jitter
+async function withRetry(taskFn, { tries = 3, baseMs = 2000, capMs = 60000 } = {}) {
+  let attempt = 0;
+  let delay = baseMs;
+  while (true) {
+    try {
+      return await taskFn();
+    } catch (e) {
+      attempt++;
+      if (attempt >= tries) throw e;
+
+      // If the error carries GitHub rate headers, honor them
+      const h = e?.response?.headers || {};
+      const ra = h['retry-after'];
+      const reset = h['x-ratelimit-reset'];
+      let waitMs = delay;
+      if (ra) waitMs = parseInt(ra, 10) * 1000;
+      else if (reset) {
+        const ms = parseInt(reset, 10) * 1000 - Date.now();
+        if (ms > 0) waitMs = ms + 500;
+      }
+      // jitter
+      waitMs = Math.min(capMs, Math.round(waitMs * (0.8 + Math.random() * 0.4)));
+
+      console.warn(`[${nowIso()}] Retry in ${Math.ceil(waitMs/1000)}s (attempt ${attempt}/${tries}): ${e?.message || e}`);
+      await sleep(waitMs);
+      delay = Math.min(capMs, delay * 2);
+    }
+  }
+}
+
+// Main initialization function
+let _initDone = false;
+let _initPromise = null;
+
+async function initialize({ force = false } = {}) {
+  if (_initDone && !force) return;
+  if (_initPromise && !force) {
+    await _initPromise;
+    return;
+  }
+
+  _initPromise = (async () => {
+    const t0 = Date.now();
+    try {
+      await initializeSchema();
+
+      const repos = loadRepositories();
+      if (!Array.isArray(repos) || repos.length === 0) {
+        console.log(`[${nowIso()}] No repositories to ingest. Done.`);
+        _initDone = true;
+        return;
+      }
+
+      const concurrency = Number(process.env.INGEST_CONCURRENCY || 2);
+      const maxRetries = Number(process.env.INGEST_RETRIES || 5);
+      const maxRepos = Number(process.env.INGEST_MAX_REPOS || 0);
+
+      const toIngest = maxRepos > 0 ? repos.slice(0, maxRepos) : repos;
+      console.log(`[${nowIso()}] Ingest start: ${toIngest.length}/${repos.length} repos, conc=${concurrency}, retries=${maxRetries}`);
+
+      const limit = createLimiter(concurrency);
+      const tasks = toIngest.map(repo =>
+        limit(async () => {
+          const start = Date.now();
+          try {
+            await handleRateLimit();
+            await withRetry(() => storeRepositoryData(repo), { tries: maxRetries });
+            console.log(`[${nowIso()}] ✅ Ingested ${repo} in ${Date.now() - start}ms`);
+            return { repo, ok: true };
+          } catch (e) {
+            console.error(`[${nowIso()}] ❌ Failed ${repo}: ${e.message}`);
+            return { repo, ok: false, error: e.message || String(e) };
+          }
+        })
+      );
+
+      const results = await Promise.allSettled(tasks);
+      const flat = results.map(r => (r.status === 'fulfilled' ? r.value : r.reason));
+      const ok = flat.filter(r => r.ok).length;
+      const fail = flat.length - ok;
+
+      console.log(`[${nowIso()}] Initialization complete in ${Date.now() - t0}ms. Success=${ok}, Failed=${fail}`);
+      if (fail) {
+        const list = flat.filter(r => !r.ok).map(r => `${r.repo}: ${r.error}`);
+        console.warn(`Failures (${fail}):\n- ${list.join('\n- ')}`);
+      }
+
+      _initDone = true;
+    } catch (err) {
+      console.error(`[${nowIso()}] Initialization error: ${err.message}`);
+      _initDone = false;
+      throw err;
+    }
+  })();
+
+  await _initPromise;
+}
+
+// GET /api/repositories?offset=0&limit=25&q=mosip&order=created_at&dir=desc
 app.get('/api/repositories', async (req, res) => {
+  const origin = req.headers.origin || '*';
+  const t0 = Date.now();
+
   try {
-    const result = await pool.query('SELECT id, name, created_at FROM repositories ORDER BY created_at DESC');
-    res.json(result.rows);
+    // Parse & clamp inputs
+    const {
+      offset = '0',
+      limit = '25',
+      q = '',
+      order = 'created_at', // or 'name'
+      dir = 'desc'          // 'asc' | 'desc'
+    } = req.query;
+
+    const off = Math.max(0, parseInt(String(offset), 10) || 0);
+    const lim = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 25));
+    const safeOrder = (['created_at', 'name'].includes(String(order))) ? String(order) : 'created_at';
+    const safeDir = (String(dir).toLowerCase() === 'asc') ? 'ASC' : 'DESC';
+
+    const params = [];
+    let idx = 1;
+
+    // Optional search by repo name (ILIKE)
+    let where = '';
+    if (q) {
+      where = `WHERE name ILIKE $${idx++}`;
+      params.push(`%${q}%`);
+    }
+
+    // Single query with total count window function
+    const sql = `
+      SELECT id, name, created_at, COUNT(*) OVER() AS total
+      FROM repositories
+      ${where}
+      ORDER BY ${safeOrder} ${safeDir}
+      OFFSET $${idx++}
+      LIMIT $${idx++}
+    `;
+    params.push(off, lim);
+
+    const result = await pool.query(sql, params);
+
+    const total = result.rows[0]?.total ? Number(result.rows[0].total) : 0;
+    const data = result.rows.map(({ total: _t, ...r }) => r);
+
+    console.log(
+      `[${new Date().toISOString()}] [origin: ${origin}] Repositories fetched: ${data.length}/total=${total}, ` +
+      `q="${q}", order=${safeOrder} ${safeDir}, offset=${off}, limit=${lim}, ${Date.now() - t0}ms`
+    );
+
+    res.set('Cache-Control', 'private, max-age=30'); // tiny cache for UI snappiness
+    return res.json({
+      data,
+      meta: {
+        total,
+        offset: off,
+        limit: lim,
+        hasMore: off + data.length < total,
+        order: safeOrder,
+        dir: safeDir,
+        q
+      }
+    });
   } catch (err) {
-    console.error('Error fetching repositories:', err);
-    res.status(500).json({ error: 'Failed to fetch repositories' });
+    console.error(
+      `[${new Date().toISOString()}] [origin: ${origin}] Error fetching repositories:`,
+      err?.message || err
+    );
+    return res.status(500).json({ error: 'Failed to fetch repositories' });
   }
 });
 
+// GET /api/repository/:id
 app.get('/api/repository/:id', async (req, res) => {
+  const origin = req.headers.origin || '*';
   const { id } = req.params;
+  const t0 = Date.now();
+
+  // Optional lightweight validation (digits or uuid-ish). Skip if your IDs are arbitrary strings.
+  const isProbablyValid =
+    /^[0-9]+$/.test(id) || /^[0-9a-fA-F-]{8,}$/.test(id);
+  if (!isProbablyValid) {
+    console.warn(`[${new Date().toISOString()}] [origin: ${origin}] Bad repo id: "${id}"`);
+    return res.status(400).json({ error: 'Invalid repository id' });
+  }
+
   try {
-    const result = await pool.query('SELECT id, name, created_at FROM repositories WHERE id = $1', [id]);
+    const query = 'SELECT id, name, created_at FROM repositories WHERE id = $1';
+    const result = await pool.query(query, [id]);
+
     if (result.rows.length === 0) {
+      console.log(`[${new Date().toISOString()}] [origin: ${origin}] Repo not found: ${id}`);
       return res.status(404).json({ error: 'Repository not found' });
     }
-    res.json(result.rows[0]);
+
+    const row = result.rows[0];
+
+    // Build a simple weak ETag from stable fields
+    const etag = `W/"${Buffer.from(`${row.id}|${row.name}|${new Date(row.created_at).toISOString()}`).toString('base64')}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'private, max-age=60');
+      return res.status(304).end();
+    }
+
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'private, max-age=60');
+
+    console.log(
+      `[${new Date().toISOString()}] [origin: ${origin}] Repo fetched: ${row.id} (${Date.now() - t0}ms)`
+    );
+    return res.json(row);
   } catch (err) {
-    console.error('Error fetching repository:', err);
-    res.status(500).json({ error: 'Failed to fetch repository' });
+    console.error(
+      `[${new Date().toISOString()}] [origin: ${origin}] Error fetching repository:`,
+      err?.message || err
+    );
+    return res.status(500).json({ error: 'Failed to fetch repository' });
   }
 });
 
 app.get('/api/users', async (req, res) => {
+  const origin = req.headers.origin || '*';
+  const t0 = Date.now();
+  const { q = '', limit = '500' } = req.query;
+
+  // Clamp limit to avoid huge payloads
+  const lim = Math.min(1000, Math.max(1, parseInt(String(limit), 10) || 500));
+
   try {
-    const result = await pool.query('SELECT DISTINCT author FROM commits LIMIT 500');
-    res.json(result.rows.map(row => row.author));
+    const params = [];
+    const predicates = [];
+
+    // optional search
+    if (q) {
+      params.push(`%${q}%`);
+      predicates.push(`author ILIKE $${params.length}`);
+    }
+
+    // always exclude null/empty authors
+    predicates.push(`author IS NOT NULL`);
+    predicates.push(`author <> ''`);
+
+    const whereSql = predicates.length ? `WHERE ${predicates.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT DISTINCT author
+      FROM (
+        SELECT author FROM commits
+        UNION ALL
+        SELECT author FROM pull_requests
+        UNION ALL
+        SELECT author FROM issues
+        UNION ALL
+        SELECT author FROM reviews
+      ) AS all_authors
+      ${whereSql}
+      ORDER BY author ASC
+      LIMIT $${params.length + 1}
+    `;
+
+    params.push(lim);
+
+    // ✅ Log SQL & parameters for debugging
+    console.log(`[${new Date().toISOString()}] SQL: ${sql.trim().replace(/\s+/g, ' ')}`);
+    console.log(`[${new Date().toISOString()}] Params: ${JSON.stringify(params)}`);
+
+    const result = await pool.query(sql, params);
+    const authors = result.rows.map(r => r.author);
+
+    console.log(
+      `[${new Date().toISOString()}] [origin: ${origin}] Fetched ${authors.length} unique authors in ${Date.now() - t0}ms`
+    );
+
+    res.json(authors);
   } catch (err) {
-    console.error('Error fetching users:', err);
+    console.error(
+      `[${new Date().toISOString()}] [origin: ${origin}] Error fetching users:`,
+      err?.message || err
+    );
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
+
 app.get('/api/activity', async (req, res) => {
   const { repo, dateRange, startDate, endDate, username, repos, users } = req.query;
+
   try {
-    let query = `
+    const params = [];
+    let idx = 1;
+
+    // Build date predicate used inside each subquery
+    let datePred;
+    if (dateRange && dateRange !== 'all' && dateRange !== 'custom') {
+      const map = { '7d': '7 days', '30d': '30 days', '90d': '90 days' };
+      const interval = map[dateRange] || '30 days';
+      datePred = `>= NOW() - $${idx}::interval`;
+      params.push(interval); idx++;
+    } else if (dateRange === 'custom' && startDate && endDate) {
+      datePred = `BETWEEN $${idx} AND $${idx + 1}`;
+      params.push(startDate, endDate); idx += 2;
+    } else {
+      datePred = `>= NOW() - $${idx}::interval`;
+      params.push('1 day'); idx++;
+    }
+
+    const unionBlock = `
       SELECT 
-        c.id, r.name as repo_name, 'commit' as type, c.author, c.committed_at as created_at, c.branch, c.message
+        c.id::text AS id, r.name AS repo_name, 'commit' AS type,
+        c.author::text AS author, c.committed_at AS created_at,
+        c.branch::text AS branch, c.message::text AS message, NULL::text AS state
       FROM commits c
       JOIN repositories r ON c.repository_id = r.id
-      WHERE 1=1
+      WHERE c.committed_at ${datePred}
+
       UNION ALL
+
       SELECT 
-        p.id, r.name as repo_name, 'pull_request' as type, p.author, p.created_at, NULL as branch, p.title, p.state
+        p.id::text, r.name, 'pull_request',
+        p.author::text, p.created_at,
+        NULL::text, p.title::text, p.state::text
       FROM pull_requests p
       JOIN repositories r ON p.repository_id = r.id
-      WHERE 1=1
+      WHERE p.created_at ${datePred}
+
       UNION ALL
+
       SELECT 
-        i.id, r.name as repo_name, 'issue' as type, i.author, i.created_at, NULL as branch, i.title
+        i.id::text, r.name, 'issue',
+        i.author::text, i.created_at,
+        NULL::text, i.title::text, NULL::text
       FROM issues i
       JOIN repositories r ON i.repository_id = r.id
-      WHERE 1=1
+      WHERE i.created_at ${datePred}
+
       UNION ALL
+
       SELECT 
-        v.id, r.name as repo_name, 'review' as type, v.author, v.created_at, NULL as branch, v.comment
+        v.id::text, r.name, 'review',
+        v.author::text, v.created_at,
+        NULL::text, v.comment::text, NULL::text
       FROM reviews v
       JOIN repositories r ON v.repository_id = r.id
-      WHERE 1=1
+      WHERE v.created_at ${datePred}
     `;
-    const params = [];
-    let paramIndex = 1;
 
+    // Outer filters for repo(s) and user(s)
+    const outerFilters = [];
     if (repo && repo !== 'all') {
-      query += ` AND r.name = $${paramIndex}`;
-      params.push(repo);
-      paramIndex++;
+      outerFilters.push(`repo_name = $${idx}`); params.push(repo); idx++;
     } else if (repos) {
-      const repoList = repos.split(',');
-      query += ` AND r.name = ANY($${paramIndex}::text[])`;
-      params.push(repoList);
-      paramIndex++;
+      outerFilters.push(`repo_name = ANY($${idx}::text[])`); params.push(repos.split(',')); idx++;
     }
 
     if (username) {
-      query += ` AND author = $${paramIndex}`;
-      params.push(username);
-      paramIndex++;
+      outerFilters.push(`author = $${idx}`); params.push(username); idx++;
     } else if (users) {
-      const userList = users.split(',');
-      query += ` AND author = ANY($${paramIndex}::text[])`;
-      params.push(userList);
-      paramIndex++;
+      outerFilters.push(`author = ANY($${idx}::text[])`); params.push(users.split(',')); idx++;
     }
 
-    if (dateRange && dateRange !== 'all' && dateRange !== 'custom') {
-      let interval;
-      switch (dateRange) {
-        case '7d':
-          interval = '7 days';
-          break;
-        case '30d':
-          interval = '30 days';
-          break;
-        case '90d':
-          interval = '90 days';
-          break;
-        default:
-          interval = '30 days';
-      }
-      query += ` AND created_at >= NOW() - INTERVAL $${paramIndex}`;
-      params.push(interval);
-      paramIndex++;
-    } else if (dateRange === 'custom' && startDate && endDate) {
-      query += ` AND created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
-      params.push(startDate, endDate);
-      paramIndex += 2;
-    }
+    const whereOuter = outerFilters.length ? `WHERE ${outerFilters.join(' AND ')}` : '';
 
-    query += ' ORDER BY created_at DESC';
+    const query = `
+      SELECT *
+      FROM (
+        ${unionBlock}
+      ) AS s
+      ${whereOuter}
+      ORDER BY created_at DESC
+    `;
 
+    console.log(`[${new Date().toISOString()}] Executing activity query:`, query, params);
     const result = await pool.query(query, params);
+    console.log(`[${new Date().toISOString()}] Fetched ${result.rows.length} activity records`);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching activities:', err);
@@ -880,69 +1198,175 @@ app.get('/api/activity', async (req, res) => {
   }
 });
 
+
 app.get('/api/stats/:repositoryId', async (req, res) => {
+  const origin = req.headers.origin || '*';
   const { repositoryId } = req.params;
+  const { dateRange, startDate, endDate } = req.query;
+
   try {
-    const [commits, issues, pullRequests, reviews] = await Promise.all([
-      pool.query('SELECT COUNT(*) as count FROM commits WHERE repository_id = $1', [repositoryId]),
-      pool.query('SELECT COUNT(*) as count FROM issues WHERE repository_id = $1', [repositoryId]),
-      pool.query('SELECT COUNT(*) as count FROM pull_requests WHERE repository_id = $1', [repositoryId]),
-      pool.query('SELECT COUNT(*) as count FROM reviews WHERE repository_id = $1', [repositoryId])
-    ]);
+    const params = [repositoryId];
+    let whereTime = '';
+    let idx = 2;
+
+    if (dateRange && dateRange !== 'all' && dateRange !== 'custom') {
+      const map = { '7d': '7 days', '30d': '30 days', '90d': '90 days' };
+      const interval = map[dateRange] || '30 days';
+      whereTime = `WHERE created_at >= NOW() - $${idx}::interval`;
+      params.push(interval); idx++;
+    } else if (dateRange === 'custom' && startDate && endDate) {
+      whereTime = `WHERE created_at BETWEEN $${idx} AND $${idx + 1}`;
+      params.push(startDate, endDate); idx += 2;
+    } // else no time filter
+
+    const sql = `
+      WITH all_items AS (
+        SELECT 'commit'::text AS type, committed_at AS created_at
+        FROM commits
+        WHERE repository_id = $1
+        UNION ALL
+        SELECT 'issue', created_at
+        FROM issues
+        WHERE repository_id = $1
+        UNION ALL
+        SELECT 'pull_request', created_at
+        FROM pull_requests
+        WHERE repository_id = $1
+        UNION ALL
+        SELECT 'review', created_at
+        FROM reviews
+        WHERE repository_id = $1
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE type = 'commit')       AS commits,
+        COUNT(*) FILTER (WHERE type = 'issue')        AS issues,
+        COUNT(*) FILTER (WHERE type = 'pull_request') AS pull_requests,
+        COUNT(*) FILTER (WHERE type = 'review')       AS reviews
+      FROM all_items
+      ${whereTime}
+    `;
+
+    const t0 = Date.now();
+    const result = await pool.query(sql, params);
+    const row = result.rows[0] || { commits: 0, issues: 0, pull_requests: 0, reviews: 0 };
+
+    console.log(
+      `[${new Date().toISOString()}] [origin: ${origin}] Stats repo=${repositoryId} ` +
+      `range=${dateRange || 'all'} took ${Date.now() - t0}ms`
+    );
+
     res.json({
-      commits: parseInt(commits.rows[0].count, 10),
-      issues: parseInt(issues.rows[0].count, 10),
-      pullRequests: parseInt(pullRequests.rows[0].count, 10),
-      reviews: parseInt(reviews.rows[0].count, 10)
+      commits: Number(row.commits) || 0,
+      issues: Number(row.issues) || 0,
+      pullRequests: Number(row.pull_requests) || 0,
+      reviews: Number(row.reviews) || 0
     });
   } catch (err) {
-    console.error('Error fetching stats:', err);
+    console.error(`[${new Date().toISOString()}] [origin: ${origin}] Error fetching stats:`, err);
     res.status(500).json({ error: 'Failed to fetch repository stats' });
   }
 });
 
+// helper: normalize "repoName" input to "owner/repo"
+function normalizeRepoInput(input) {
+  if (typeof input !== 'string') return null;
+  const trimmed = input.trim();
+
+  // Accept full URLs like https://github.com/mosip/mosip(.git)
+  const urlMatch = trimmed.match(/^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)(?:\.git)?\/?$/i);
+  if (urlMatch) return `${urlMatch[1]}/${urlMatch[2]}`;
+
+  // Accept owner/repo
+  const orMatch = trimmed.match(/^([^\/\s]+)\/([^\/\s]+)$/);
+  if (orMatch) return `${orMatch[1]}/${orMatch[2]}`;
+
+  return null;
+}
+
 app.post('/api/addRepo', async (req, res) => {
-  const { repoName } = req.body;
-  if (!repoName) {
-    return res.status(400).json({ error: 'Repository name is required' });
+  const origin = req.headers.origin || '*';
+  const t0 = Date.now();
+  const { repoName } = req.body || {};
+  const { sync } = req.query; // optional ?sync=true to wait for ingestion
+
+  // Validate & normalize
+  const normalized = normalizeRepoInput(repoName || '');
+  if (!normalized) {
+    return res.status(400).json({ error: 'Invalid repository. Use "owner/repo" or a GitHub URL.' });
   }
+
   try {
-    const repo = await getOrCreateRepository(repoName);
-    await storeRepositoryData(repoName);
-    res.json({ success: true, repository: repo });
+    // Idempotent get-or-create
+    // getOrCreateRepository should upsert (by unique "name" or "github_id") and return the row
+    const repo = await getOrCreateRepository(normalized);
+
+    // If the repo already exists, you might want to short-circuit ingestion unless forced:
+    // const alreadyIndexedRecently = ... (optional freshness check)
+
+    // Run ingestion either async (fast 202) or sync (await)
+    const runIngestion = async () => {
+      try {
+        await storeRepositoryData(normalized); // your existing function
+      } catch (e) {
+        // Log but don't crash the server; clients can re-trigger
+        console.error(`[${nowIso()}] [origin: ${origin}] storeRepositoryData failed for ${normalized}:`, e?.message || e);
+      }
+    };
+
+    if (String(sync).toLowerCase() === 'true') {
+      await runIngestion();
+      console.log(`[${new Date().toISOString()}] [origin: ${origin}] addRepo (sync) ${normalized} in ${Date.now() - t0}ms`);
+      return res.json({ success: true, repository: repo, ingested: true });
+    } else {
+      // fire-and-forget (don’t block request)
+      setImmediate(runIngestion);
+      console.log(`[${new Date().toISOString()}] [origin: ${origin}] addRepo (async) ${normalized} in ${Date.now() - t0}ms`);
+      // 202 Accepted is semantically correct when background work continues
+      res.status(202).json({ success: true, repository: repo, ingested: false, message: 'Ingestion scheduled' });
+    }
   } catch (err) {
-    console.error('Error adding repository:', err);
+    // Map common GitHub problems if getOrCreateRepository/storeRepositoryData throws those through
+    const status = err?.response?.status;
+    if (status === 404) {
+      return res.status(404).json({ error: 'GitHub repository not found or no access' });
+    }
+    if (status === 403) {
+      return res.status(403).json({ error: 'Access forbidden by GitHub (check token scopes or rate limits)' });
+    }
+    console.error(`[${new Date().toISOString()}] [origin: ${origin}] Error adding repository ${repoName}:`, err?.message || err);
     res.status(500).json({ error: 'Failed to add repository' });
   }
 });
-
-// Main initialization function
-async function initialize() {
-  try {
-    await initializeSchema();
-    // Run initial data ingestion
-    const repos = loadRepositories();
-    for (const repo of repos) {
-      try {
-        await storeRepositoryData(repo);
-      } catch (error) {
-        console.error(`Failed to process ${repo}: ${error.message}`);
-      }
-    }
-  } catch (error) {
-    console.error('Initialization error:', error.message);
-    throw error;
-  }
-}
 
 // Create the server for Lambda
 const server = awsServerlessExpress.createServer(app);
 
 // Lambda handler
 exports.handler = async (event, context) => {
-  // Ensure schema and initial data are set up
-  await initialize();
-  return awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
+  console.log(`[${new Date().toISOString()}] Lambda invoked with event:`, JSON.stringify(event));
+  console.log(`[${new Date().toISOString()}] event.path: ${event.path}, event.rawPath: ${event.rawPath}`);
+  try {
+    if (event.rawPath && event.path !== event.rawPath) event.path = event.rawPath;
+
+    await initialize();
+    
+    const response = await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
+    console.log(`[${new Date().toISOString()}] Response headers:`, response.headers);
+    return response;
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Lambda handler error:`, error.message);
+    const origin = event.headers?.origin || '*';
+    return {
+      statusCode: 500,
+      headers: {
+        //'Access-Control-Allow-Origin': '*',
+        //'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        //'Access-Control-Allow-Headers': 'Content-Type',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: 'Server initialization failed' })
+    };
+  }
 };
 
 // Graceful shutdown
