@@ -9,7 +9,6 @@ import { useGitHubActivity, useRepositories } from './lib/hooks';
 import { addRepository, fetchUsers } from './lib/api';
 import type { ActivityItem, Repository } from './lib/database.types';
 import DetailView from './components/DetailView';
-
 function App() {
   const [selectedRepo, setSelectedRepo] = useState<string>('all');
   const [startDate, setStartDate] = useState<string>('');
@@ -30,7 +29,6 @@ function App() {
   const [showDetailView, setShowDetailView] = useState(false);
   const [detailViewType, setDetailViewType] = useState<'commit' | 'pull_request' | 'review' | null>(null);
   const [detailViewData, setDetailViewData] = useState<ActivityItem[] | null>(null);
-
   const { activities, loading, error } = useGitHubActivity(
     selectedRepo,
     dateRange,
@@ -41,22 +39,18 @@ function App() {
     selectedRepos,
     selectedUsers
   );
-
   const { data: repoData, isLoading: reposLoading, error: reposError } = useRepositories();
-
   useEffect(() => {
     setDisplayedActivities(activities);
   }, [activities]);
-
   useEffect(() => {
     if (repoData) {
-      setRepositories(repoData.map((repo: Repository) => repo.name));
+      setRepositories(repoData.data.map((repo: Repository) => repo.name));
     }
     if (reposError) {
       console.error("Error fetching repositories:", reposError);
     }
   }, [repoData, reposError]);
-
   useEffect(() => {
     async function loadUsers() {
       try {
@@ -68,18 +62,15 @@ function App() {
     }
     loadUsers();
   }, []);
-
   const handleDateRangeChange = (value: string) => {
     setDateRange(value);
     setShouldFetchData(true);
   };
-
   const handleApplyCustomDates = () => {
     if (startDate && endDate) {
       setShouldFetchData(true);
     }
   };
-
   const handleAddRepo = async () => {
     setAddRepoError('');
     try {
@@ -90,16 +81,13 @@ function App() {
       setAddRepoError(error.message || 'Failed to add repository');
     }
   };
-
   const handleSearchUser = () => {
     setCurrentUsername(searchUsername);
     setShouldFetchData(true);
   };
-
   const handleExpand = () => {
     setShouldFetchData(true);
   };
-
   const handleAddUser = () => {
     if (searchUsername && !users.includes(searchUsername)) {
       setUsers([...users, searchUsername]);
@@ -111,18 +99,15 @@ function App() {
       setAddUserError('Please enter a username.');
     }
   };
-
   const handleDeleteUser = (userToDelete: string) => {
     setUsers(users.filter(user => user !== userToDelete));
     setSelectedUsers(selectedUsers.filter(user => user !== userToDelete));
     setShouldFetchData(true);
   };
-
   // Calculate open and closed PR counts
   const openPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'open').length;
   const closedPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'closed').length;
   const reviewCount = activities.filter(a => a.type === 'review').length;
-
   const handleStatsClick = (type: 'all' | 'commit' | 'pull_request' | 'review') => {
     setFilterType(type);
     const filtered = activities.filter(activity => type === 'all' || activity.type === type);
@@ -137,13 +122,11 @@ function App() {
       setShowDetailView(true);
     }
   };
-
   const handleCloseDetailView = () => {
     setShowDetailView(false);
     setDetailViewType(null);
     setDetailViewData(null);
   };
-
   return (
     <div className="min-h-screen bg-gray-100">
       <Sidebar
@@ -159,7 +142,6 @@ function App() {
         }}
         onDeleteUser={handleDeleteUser}
       />
-
       <div className="pl-64">
         <header className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -179,7 +161,6 @@ function App() {
                   <option value="90d">Last 90 days</option>
                   <option value="custom">Custom Range</option>
                 </select>
-                
                 {dateRange === 'custom' && (
                   <div className="flex items-center gap-2">
                     <input
@@ -210,7 +191,6 @@ function App() {
             </div>
           </div>
         </header>
-        
         <div className="p-4 flex items-center gap-2">
           <input
             type="text"
@@ -228,7 +208,6 @@ function App() {
           </button>
           {addUserError && <p className="text-red-500 text-sm mt-1">{addUserError}</p>}
         </div>
-
         <div className="p-4">
           <input
             type="text"
@@ -242,7 +221,6 @@ function App() {
           </button>
           {addRepoError && <p className="text-red-500 text-sm mt-1">{addRepoError}</p>}
         </div>
-
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {loading || reposLoading ? (
             <p>Loading...</p>
@@ -256,11 +234,9 @@ function App() {
                 <StatsCard title="Closed Pull Requests" value={closedPRCount} icon={GitPullRequest} onClick={() => handleStatsClick('pull_request')} />
                 <StatsCard title="Reviews" value={reviewCount} icon={MessageSquare} onClick={() => handleStatsClick('review')} />
               </div>
-
               <div className="mb-8">
                 <ActivityChart activities={displayedActivities} />
               </div>
-
               <div className="grid grid-cols-1 gap-8">
                 <UserActivityStats activities={activities} />
                 <ActivityTable activities={displayedActivities} />
@@ -285,5 +261,4 @@ function App() {
     </div>
   );
 }
-
 export default App;
