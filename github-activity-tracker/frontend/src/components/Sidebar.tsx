@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GitBranch, ChevronDown, User, Trash2 } from 'lucide-react';
 
 interface SidebarProps {
@@ -15,10 +15,22 @@ interface SidebarProps {
 export function Sidebar({ repositories, users, selectedRepos, selectedUsers, onSelectRepos, onSelectUsers, onSelectRepo, onDeleteUser }: SidebarProps) {
   const [repoSearchTerm, setRepoSearchTerm] = useState('');
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [isSelectedAllRepos, setIsSelectedAllRepos] = useState(false);
+  const [filteredRepositories, setFilteredRepositories] = useState(repositories);
 
-  const filteredRepositories = repositories.filter(repo =>
-    repo.toLowerCase().includes(repoSearchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    setFilteredRepositories(repositories);
+  }, [repositories]);
+
+  const handleAddAllRepos = () => {
+    if (isSelectedAllRepos) {
+      onSelectRepos([]);
+      setIsSelectedAllRepos(false);
+      return;
+    }
+    onSelectRepos(filteredRepositories);
+    setIsSelectedAllRepos(true);
+  }
 
   const filteredUsers = users.filter(user =>
     user.toLowerCase().includes(userSearchTerm.toLowerCase())
@@ -27,10 +39,27 @@ export function Sidebar({ repositories, users, selectedRepos, selectedUsers, onS
   const handleRepoCheckboxChange = (repo: string) => {
     if (selectedRepos.includes(repo)) {
       onSelectRepos(selectedRepos.filter(r => r !== repo));
+      setIsSelectedAllRepos(false);
     } else {
-      onSelectRepos([...selectedRepos, repo]);
+      let newSelectedRepos = [...selectedRepos, repo];
+      if (newSelectedRepos.length === filteredRepositories.length) {
+        setIsSelectedAllRepos(true);
+      }
+      onSelectRepos(newSelectedRepos);
     }
   };
+
+  const handleRepoSearchTerm = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let repoSearchTerm = e.target.value;
+    const addFilteredRepositories = repositories.filter(repo =>
+      repo.toLowerCase().includes(repoSearchTerm.toLowerCase())
+    );
+    setFilteredRepositories(addFilteredRepositories);
+    setRepoSearchTerm(repoSearchTerm);
+    if (e.target.value !== '') return;
+    setIsSelectedAllRepos(false);
+
+  }
 
   const handleUserCheckboxChange = (user: string) => {
     if (selectedUsers.includes(user)) {
@@ -55,7 +84,7 @@ export function Sidebar({ repositories, users, selectedRepos, selectedUsers, onS
           type="text"
           placeholder="Search repositories..."
           value={repoSearchTerm}
-          onChange={(e) => setRepoSearchTerm(e.target.value)}
+          onChange={handleRepoSearchTerm}
           className="mt-2 w-full border border-gray-300 rounded px-2 py-1 text-sm"
         />
       </div>
@@ -63,15 +92,26 @@ export function Sidebar({ repositories, users, selectedRepos, selectedUsers, onS
         <div className="p-2">
           <button
             onClick={() => onSelectRepo('all')}
-            className={`w-full text-left px-4 py-2 rounded-lg mb-1 ${
-              selectedRepos.length === 0
-                ? 'bg-blue-50 text-blue-600'
-                : 'hover:bg-gray-50'
-            }`}
+            className={`w-full text-left px-4 py-2 rounded-lg mb-1 ${selectedRepos.length === 0
+              ? 'bg-blue-50 text-blue-600'
+              : 'hover:bg-gray-50'
+              }`}
           >
             All Repositories
           </button>
-          {filteredRepositories.map((repo) => (
+          {filteredRepositories.length > 0 && <>
+            <label className="flex items-center w-full mb-1">
+              <input
+                type="checkbox"
+                value="selectAll"
+                checked={isSelectedAllRepos}
+                onChange={handleAddAllRepos}
+                className="mr-2 cursor-pointer"
+              />
+              <span className="text-sm mb-2">Select All Repositories</span>
+            </label>
+          </>}
+          {filteredRepositories && filteredRepositories.map((repo) => (
             <label key={repo} className="flex items-center w-full mb-1">
               <input
                 type="checkbox"
