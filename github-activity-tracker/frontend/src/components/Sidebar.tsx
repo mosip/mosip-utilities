@@ -90,29 +90,20 @@ export function Sidebar({ repositories, users, selectedRepos, selectedUsers, onS
       </div>
       <div className="overflow-y-auto flex-1">
         <div className="p-2">
-          <button
-            onClick={() => onSelectRepo('all')}
-            className={`w-full text-left px-4 py-2 rounded-lg mb-1 ${selectedRepos.length === 0
-              ? 'bg-blue-50 text-blue-600'
-              : 'hover:bg-gray-50'
-              }`}
-          >
-            All Repositories
-          </button>
           {filteredRepositories.length > 0 && <>
-            <label className="flex items-center w-full mb-1">
+            <label className="flex items-center w-full mb-2 cursor-pointer">
               <input
                 type="checkbox"
                 value="selectAll"
                 checked={isSelectedAllRepos}
                 onChange={handleAddAllRepos}
-                className="mr-2 cursor-pointer"
+                className="mr-2"
               />
-              <span className="text-sm mb-2">Select All Repositories</span>
+              <span className="text-sm">Select All Repositories</span>
             </label>
           </>}
           {filteredRepositories && filteredRepositories.map((repo) => (
-            <label key={repo} className="flex items-center w-full mb-1">
+            <label key={repo} className="flex items-center w-full mb-1 cursor-pointer">
               <input
                 type="checkbox"
                 value={repo}
