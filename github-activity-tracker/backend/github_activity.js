@@ -924,14 +924,14 @@ app.get('/api/repositories', async (req, res) => {
     // Parse & clamp inputs
     const {
       offset = '0',
-      limit = '25',
+      limit = '',
       q = '',
       order = 'created_at', // or 'name'
       dir = 'desc'          // 'asc' | 'desc'
     } = req.query;
 
     const off = Math.max(0, parseInt(String(offset), 10) || 0);
-    const lim = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 25));
+    const lim = Math.min(200, Math.max(1, parseInt(String(limit), 10) || 200));
     const safeOrder = (['created_at', 'name'].includes(String(order))) ? String(order) : 'created_at';
     const safeDir = (String(dir).toLowerCase() === 'asc') ? 'ASC' : 'DESC';
 
