@@ -12,11 +12,9 @@ const nowIso = () => new Date().toISOString();
 // Load environment variables
 dotenv.config();
 
-// GitHub API Token
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-if (!GITHUB_TOKEN) {
-  throw new Error("GitHub token is missing.");
-}
+// GitHub API Token Manager
+const GitHubTokenManager = require('./GitHubTokenManager');
+const tokenManager = new GitHubTokenManager();
 
 // RDS configuration
 const RDS_HOST = process.env.RDS_HOST;
@@ -123,13 +121,8 @@ async function initializeSchema() {
   }
 }
 
-// GitHub API Headers
-const HEADERS = {
-  "Accept": "application/vnd.github+json",
-  "User-Agent": "github-activity-tracker/1.0",
-  "X-GitHub-Api-Version": "2022-11-28",
-  "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`
-};
+// GitHub API Headers - now using token manager
+const getHeaders = () => tokenManager.getHeaders();
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
 
@@ -184,50 +177,9 @@ async function getLatestDate(tableName, repoId, dateField) {
   }
 }
 
-// Check rate limit
-async function checkRateLimit() {
-  try {
-    const response = await axios.get("https://api.github.com/rate_limit", { headers: HEADERS });
-    if (response.status === 200) {
-      const remaining = response.data.resources.core.remaining;
-      const resetTime = response.data.resources.core.reset;
-      return { remaining, resetTime };
-    }
-    return { remaining: null, resetTime: null };
-  } catch (error) {
-    console.error("Error checking rate limit:", error.message);
-    return { remaining: null, resetTime: null };
-  }
-}
-
-let rateLimitCache = { remaining: null, resetTime: null, lastChecked: 0 };
 
 async function handleRateLimit() {
-  const now = Date.now();
-  // Refresh cache every 30 seconds or if reset time has passed
-  if (now - rateLimitCache.lastChecked > 30000 || (rateLimitCache.resetTime && now >= rateLimitCache.resetTime * 1000)) {
-    try {
-      const response = await axios.get("https://api.github.com/rate_limit", { headers: HEADERS });
-      rateLimitCache = {
-        remaining: parseInt(response.data.resources.core.remaining, 10),
-        resetTime: parseInt(response.data.resources.core.reset, 10),
-        lastChecked: now
-      };
-      console.log(`[${nowIso()}] Rate limit updated: ${rateLimitCache.remaining} remaining, reset at ${new Date(rateLimitCache.resetTime * 1000).toISOString()}`);
-    } catch (error) {
-      console.error(`[${nowIso()}] Error checking rate limit: ${error.message}`);
-      rateLimitCache = { remaining: null, resetTime: null, lastChecked: now };
-    }
-  }
-
-  if (rateLimitCache.remaining !== null && rateLimitCache.remaining < 20) {
-    const waitTime = Math.max(rateLimitCache.resetTime * 1000 - now, 0) + 5000;
-    console.log(`[${nowIso()}] Rate limit low (${rateLimitCache.remaining} remaining). Waiting ${Math.ceil(waitTime / 1000)}s...`);
-    await sleep(waitTime);
-    rateLimitCache.lastChecked = 0; // Force refresh after wait
-    return true;
-  }
-  return false;
+  return await tokenManager.handleRateLimit();
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -555,7 +507,7 @@ async function queryGraphQL(query, variables = {}) {
     const response = await axios.post(
       GRAPHQL_URL,
       { query, variables },
-      { headers: HEADERS }
+      { headers: getHeaders() }
     );
 
     const remaining = response.headers["x-ratelimit-remaining"] ?? "N/A";
@@ -573,6 +525,26 @@ async function queryGraphQL(query, variables = {}) {
     return response.data.data;
   } catch (error) {
     console.error(`[${nowIso()}] GraphQL error: ${error.message}`);
+    
+    // If it's a rate limit error, try switching tokens and retry once
+    if (error.response?.status === 403 && error.response?.headers?.['x-ratelimit-remaining'] === '0') {
+      console.log(`[${nowIso()}] Rate limit hit, attempting to switch token and retry...`);
+      const switched = await tokenManager.switchToNextToken();
+      if (switched) {
+        console.log(`[${nowIso()}] Retrying GraphQL query with new token...`);
+        const retryResponse = await axios.post(
+          GRAPHQL_URL,
+          { query, variables },
+          { headers: getHeaders() }
+        );
+        
+        if (retryResponse.status === 200 && !retryResponse.data.errors) {
+          console.log(`[${nowIso()}] GraphQL retry successful, took ${Date.now() - t0}ms`);
+          return retryResponse.data.data;
+        }
+      }
+    }
+    
     throw error;
   }
 }
@@ -790,9 +762,9 @@ async function storeRepositoryData(repoName) {
     const insertedReviews = await insertReviewsBatched(reviewRows);
 
     console.log(`[${nowIso()}] Inserted for ${repoName}: ${insertedCommits} commits, ${insertedPRs} PRs, ${insertedIssues} issues, ${insertedReviews} reviews`);
-    console.log(`[${nowIso()}] ✅ Processed ${repoName}`);
+    console.log(`[${nowIso()}] Processed ${repoName}`);
   } catch (err) {
-    console.error(`[${nowIso()}] ❌ Error processing ${repoName}: ${err.message}`);
+    console.error(`[${nowIso()}] Error processing ${repoName}: ${err.message}`);
     throw err;
   }
 }
@@ -1349,7 +1321,7 @@ exports.handler = async (event, context) => {
     if (event.rawPath && event.path !== event.rawPath) event.path = event.rawPath;
 
     await initialize();
-    
+
     const response = await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
     console.log(`[${new Date().toISOString()}] Response headers:`, response.headers);
     return response;
