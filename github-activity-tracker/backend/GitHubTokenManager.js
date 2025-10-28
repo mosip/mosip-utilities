@@ -3,7 +3,7 @@ const axios = require('axios');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Minimum remaining requests before hitting the GitHub API rate limit.
-const RATE_LIMIT_THRESHOLD = 20;
+const RATE_LIMIT_THRESHOLD = 100;
 
 class GitHubTokenManager {
   constructor() {
