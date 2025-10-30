@@ -12,7 +12,12 @@ class GitHubTokenManager {
       process.env.GITHUB_TOKEN_2 || "", 
       process.env.GITHUB_TOKEN_3 || "",
       process.env.GITHUB_TOKEN_4 || "",
-      process.env.GITHUB_TOKEN_5 || ""
+      process.env.GITHUB_TOKEN_5 || "",
+      process.env.GITHUB_TOKEN_6 || "",
+      process.env.GITHUB_TOKEN_7 || "",
+      process.env.GITHUB_TOKEN_8 || "",
+      process.env.GITHUB_TOKEN_9 || "",
+      process.env.GITHUB_TOKEN_10 || ""
     ];
     this.tokenLimits = {};
     this.currentTokenIndex = 0;
