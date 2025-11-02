@@ -122,7 +122,13 @@ async function initializeSchema() {
 }
 
 // GitHub API Headers - now using token manager
-const getHeaders = () => tokenManager.getHeaders();
+// const getHeaders = () => tokenManager.getHeaders();
+const getHeaders = {
+      "Accept": "application/vnd.github+json",
+      "User-Agent": "github-activity-tracker/1.0",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`
+    }
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
 
@@ -507,7 +513,7 @@ async function queryGraphQL(query, variables = {}) {
     const response = await axios.post(
       GRAPHQL_URL,
       { query, variables },
-      { headers: getHeaders() }
+      { headers: getHeaders }
     );
 
     const remaining = response.headers["x-ratelimit-remaining"] ?? "N/A";
@@ -535,7 +541,7 @@ async function queryGraphQL(query, variables = {}) {
         const retryResponse = await axios.post(
           GRAPHQL_URL,
           { query, variables },
-          { headers: getHeaders() }
+          { headers: getHeaders }
         );
         
         if (retryResponse.status === 200 && !retryResponse.data.errors) {
@@ -1313,6 +1319,39 @@ app.post('/api/addRepo', async (req, res) => {
 // Create the server for Lambda
 const server = awsServerlessExpress.createServer(app);
 
+// Initialize schema only (fast, required for queries)
+let _schemaInitDone = false;
+let _schemaInitPromise = null;
+
+async function ensureSchema() {
+  if (_schemaInitDone) return;
+  if (_schemaInitPromise) {
+    await _schemaInitPromise;
+    return;
+  }
+  
+  _schemaInitPromise = (async () => {
+    try {
+      await initializeSchema();
+      _schemaInitDone = true;
+      console.log(`[${nowIso()}] Schema initialization complete`);
+    } catch (err) {
+      console.error(`[${nowIso()}] Schema initialization error:`, err.message);
+      throw err;
+    }
+  })();
+  
+  await _schemaInitPromise;
+  
+  // Start full initialization (including ingestion) in background if not already started
+  if (!_initPromise && !_initDone) {
+    console.log(`[${nowIso()}] Starting background repository ingestion...`);
+    initialize().catch(err => {
+      console.error(`[${nowIso()}] Background initialization error:`, err.message);
+    });
+  }
+}
+
 // Lambda handler
 exports.handler = async (event, context) => {
   console.log(`[${new Date().toISOString()}] Lambda invoked with event:`, JSON.stringify(event));
@@ -1320,7 +1359,8 @@ exports.handler = async (event, context) => {
   try {
     if (event.rawPath && event.path !== event.rawPath) event.path = event.rawPath;
 
-    await initialize();
+    // Only wait for schema initialization (fast), not full ingestion
+    await ensureSchema();
 
     const response = await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
     console.log(`[${new Date().toISOString()}] Response headers:`, response.headers);
