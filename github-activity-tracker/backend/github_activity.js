@@ -1080,27 +1080,37 @@ app.get('/api/users', async (req, res) => {
 
 
 app.get('/api/activity', async (req, res) => {
+  console.log(`[${new Date().toISOString()}] /api/activity route HIT!`);
+  console.log(`[${new Date().toISOString()}] Query params:`, req.query);
+  
   const { repo, dateRange, startDate, endDate, username, repos, users } = req.query;
-
+  console.log(`[${new Date().toISOString()}] Parsed - repos: ${repos}, users: ${users}, repo: ${repo}, userName: ${username}`);
+  
   try {
     const params = [];
     let idx = 1;
 
     // Build date predicate used inside each subquery
-    let datePred;
+    let datePred = ''; // No date filter if dateRange is 'all'
+    let dateParamIdx = null;
+    
     if (dateRange && dateRange !== 'all' && dateRange !== 'custom') {
       const map = { '7d': '7 days', '30d': '30 days', '90d': '90 days' };
       const interval = map[dateRange] || '30 days';
-      datePred = `>= NOW() - $${idx}::interval`;
-      params.push(interval); idx++;
+      dateParamIdx = idx;
+      datePred = `AND committed_at >= NOW() - $${idx}::interval`;
+      params.push(interval); 
+      idx++;
     } else if (dateRange === 'custom' && startDate && endDate) {
-      datePred = `BETWEEN $${idx} AND $${idx + 1}`;
-      params.push(startDate, endDate); idx += 2;
-    } else {
-      datePred = `>= NOW() - $${idx}::interval`;
-      params.push('1 day'); idx++;
+      dateParamIdx = idx;
+      datePred = `AND committed_at BETWEEN $${idx} AND $${idx + 1}`;
+      params.push(startDate, endDate); 
+      idx += 2;
     }
+    // If dateRange is 'all', datePred remains empty (no date filtering)
 
+    // Build UNION query with optional date filtering
+    // Note: For commits, we use committed_at; for others, we use created_at
     const unionBlock = `
       SELECT 
         c.id::text AS id, r.name AS repo_name, 'commit' AS type,
@@ -1108,7 +1118,7 @@ app.get('/api/activity', async (req, res) => {
         c.branch::text AS branch, c.message::text AS message, NULL::text AS state
       FROM commits c
       JOIN repositories r ON c.repository_id = r.id
-      WHERE c.committed_at ${datePred}
+      ${datePred ? datePred.replace('committed_at', 'c.committed_at') : ''}
 
       UNION ALL
 
@@ -1118,7 +1128,7 @@ app.get('/api/activity', async (req, res) => {
         NULL::text, p.title::text, p.state::text
       FROM pull_requests p
       JOIN repositories r ON p.repository_id = r.id
-      WHERE p.created_at ${datePred}
+      ${datePred ? datePred.replace('committed_at', 'p.created_at') : ''}
 
       UNION ALL
 
@@ -1128,7 +1138,7 @@ app.get('/api/activity', async (req, res) => {
         NULL::text, i.title::text, NULL::text
       FROM issues i
       JOIN repositories r ON i.repository_id = r.id
-      WHERE i.created_at ${datePred}
+      ${datePred ? datePred.replace('committed_at', 'i.created_at') : ''}
 
       UNION ALL
 
@@ -1138,7 +1148,7 @@ app.get('/api/activity', async (req, res) => {
         NULL::text, v.comment::text, NULL::text
       FROM reviews v
       JOIN repositories r ON v.repository_id = r.id
-      WHERE v.created_at ${datePred}
+      ${datePred ? datePred.replace('committed_at', 'v.created_at') : ''}
     `;
 
     // Outer filters for repo(s) and user(s)
