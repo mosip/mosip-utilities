@@ -1080,11 +1080,8 @@ app.get('/api/users', async (req, res) => {
 
 
 app.get('/api/activity', async (req, res) => {
-  console.log(`[${new Date().toISOString()}] /api/activity route HIT!`);
-  console.log(`[${new Date().toISOString()}] Query params:`, req.query);
-  
   const { repo, dateRange, startDate, endDate, username, repos, users } = req.query;
-  console.log(`[${new Date().toISOString()}] Parsed - repos: ${repos}, users: ${users}, repo: ${repo}, userName: ${username}`);
+  
   
   try {
     const params = [];
