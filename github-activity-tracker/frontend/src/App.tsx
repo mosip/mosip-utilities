@@ -105,8 +105,8 @@ function App() {
     setShouldFetchData(true);
   };
   // Calculate open and closed PR counts
-  const openPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'open').length;
-  const closedPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'closed').length;
+  const openPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'OPEN').length;
+  const closedPRCount = activities.filter(a => a.type === 'pull_request' && a.state === 'CLOSED').length;
   const reviewCount = activities.filter(a => a.type === 'review').length;
   const handleStatsClick = (type: 'all' | 'commit' | 'pull_request' | 'review') => {
     setFilterType(type);
