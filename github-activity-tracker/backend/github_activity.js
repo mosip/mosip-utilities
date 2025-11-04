@@ -13,8 +13,8 @@ const nowIso = () => new Date().toISOString();
 dotenv.config();
 
 // GitHub API Token Manager
-const GitHubTokenManager = require('./GitHubTokenManager');
-const tokenManager = new GitHubTokenManager();
+// const GitHubTokenManager = require('./GitHubTokenManager');
+// const tokenManager = new GitHubTokenManager();
 
 // RDS configuration
 const RDS_HOST = process.env.RDS_HOST;
@@ -184,9 +184,9 @@ async function getLatestDate(tableName, repoId, dateField) {
 }
 
 
-async function handleRateLimit() {
-  return await tokenManager.handleRateLimit();
-}
+// async function handleRateLimit() {
+//   return await tokenManager.handleRateLimit();
+// }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -678,7 +678,7 @@ async function storeRepositoryData(repoName) {
     let hasNextPage = true;
 
     while (hasNextPage) {
-      await handleRateLimit(); // Check rate limit before each query
+      // await handleRateLimit(); // Check rate limit before each query
 
       const data = await queryGraphQL(REPO_QUERY, {
         owner,
@@ -860,7 +860,7 @@ async function initialize({ force = false } = {}) {
         limit(async () => {
           const start = Date.now();
           try {
-            await handleRateLimit();
+            // await handleRateLimit();
             await withRetry(() => storeRepositoryData(repo), { tries: maxRetries });
             console.log(`[${nowIso()}] ✅ Ingested ${repo} in ${Date.now() - start}ms`);
             return { repo, ok: true };
