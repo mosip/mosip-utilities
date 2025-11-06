@@ -828,7 +828,10 @@ async function withRetry(taskFn, { tries = 3, baseMs = 2000, capMs = 60000 } = {
 // Main initialization function
 let _initDone = false;
 let _initPromise = null;
-
+// Throttle ingestion to avoid overlapping runs on every request
+let _ingestInFlight = false;
+let _lastIngestAt = 0;
+const INGEST_MIN_INTERVAL_MS = parseInt(process.env.INGEST_MIN_INTERVAL_MS || '1800000', 10); // default 30 minutes
 async function initialize({ force = false } = {}) {
   if (_initDone && !force) return;
   if (_initPromise && !force) {
@@ -1331,6 +1334,29 @@ let _schemaInitDone = false;
 let _schemaInitPromise = null;
 
 async function ensureSchema() {
+  console.log(`[${nowIso()}] Ensuring schema initialization...`);
+
+  // Throttled background ingestion should run regardless of schema status
+  const now = Date.now();
+  if (_ingestInFlight) {
+    console.log(`[${nowIso()}] Ingestion already in flight, skipping trigger`);
+  } else if (now - _lastIngestAt < INGEST_MIN_INTERVAL_MS) {
+    console.log(`[${nowIso()}] Ingestion recently ran (${Math.round((now - _lastIngestAt)/1000)}s ago), skipping trigger`);
+  } else {
+    console.log(`[${nowIso()}] Triggering background repository ingestion (force)`);
+    _ingestInFlight = true;
+    setImmediate(() => {
+      initialize({ force: true })
+        .catch(err => {
+          console.error(`[${nowIso()}] Background initialization error:`, err.message);
+        })
+        .finally(() => {
+          _ingestInFlight = false;
+          _lastIngestAt = Date.now();
+        });
+    });
+  }
+
   if (_schemaInitDone) return;
   if (_schemaInitPromise) {
     await _schemaInitPromise;
@@ -1349,14 +1375,6 @@ async function ensureSchema() {
   })();
   
   await _schemaInitPromise;
-  
-  // Start full initialization (including ingestion) in background if not already started
-  if (!_initPromise && !_initDone) {
-    console.log(`[${nowIso()}] Starting background repository ingestion...`);
-    initialize().catch(err => {
-      console.error(`[${nowIso()}] Background initialization error:`, err.message);
-    });
-  }
 }
 
 // Lambda handler
