@@ -1271,6 +1271,22 @@ function normalizeRepoInput(input) {
   return null;
 }
 
+// Dedicated endpoint to trigger ingestion
+app.post('/api/ingest', async (req, res) => {
+  const origin = req.headers.origin || '*';
+  const t0 = Date.now();
+  
+  try {
+    console.log(`[${nowIso()}] Manual ingestion triggered via /api/ingest`);
+    await triggerIngestionIfNeeded();
+    console.log(`[${nowIso()}] Ingestion completed in ${Date.now() - t0}ms`);
+    return res.json({ success: true, message: 'Ingestion triggered successfully' });
+  } catch (err) {
+    console.error(`[${nowIso()}] Error triggering ingestion:`, err.message);
+    return res.status(500).json({ error: 'Failed to trigger ingestion', message: err.message });
+  }
+});
+
 app.post('/api/addRepo', async (req, res) => {
   const origin = req.headers.origin || '*';
   const t0 = Date.now();
@@ -1336,27 +1352,6 @@ let _schemaInitPromise = null;
 async function ensureSchema() {
   console.log(`[${nowIso()}] Ensuring schema initialization...`);
 
-  // Throttled background ingestion should run regardless of schema status
-  const now = Date.now();
-  if (_ingestInFlight) {
-    console.log(`[${nowIso()}] Ingestion already in flight, skipping trigger`);
-  } else if (now - _lastIngestAt < INGEST_MIN_INTERVAL_MS) {
-    console.log(`[${nowIso()}] Ingestion recently ran (${Math.round((now - _lastIngestAt)/1000)}s ago), skipping trigger`);
-  } else {
-    console.log(`[${nowIso()}] Triggering background repository ingestion (force)`);
-    _ingestInFlight = true;
-    setImmediate(() => {
-      initialize({ force: true })
-        .catch(err => {
-          console.error(`[${nowIso()}] Background initialization error:`, err.message);
-        })
-        .finally(() => {
-          _ingestInFlight = false;
-          _lastIngestAt = Date.now();
-        });
-    });
-  }
-
   if (_schemaInitDone) return;
   if (_schemaInitPromise) {
     await _schemaInitPromise;
@@ -1377,6 +1372,44 @@ async function ensureSchema() {
   await _schemaInitPromise;
 }
 
+// Store the ingestion promise to prevent garbage collection in Lambda
+let _ingestionPromise = null;
+
+// Separate function to trigger ingestion (can be called from Lambda handler)
+async function triggerIngestionIfNeeded() {
+  const now = Date.now();
+  if (_ingestInFlight) {
+    console.log(`[${nowIso()}] Ingestion already in flight, skipping trigger`);
+    // Return the existing promise if one is running
+    return _ingestionPromise || Promise.resolve();
+  }
+  
+  if (now - _lastIngestAt < INGEST_MIN_INTERVAL_MS) {
+    console.log(`[${nowIso()}] Ingestion recently ran (${Math.round((now - _lastIngestAt)/1000)}s ago), skipping trigger`);
+    return Promise.resolve();
+  }
+  
+  console.log(`[${nowIso()}] Triggering repository ingestion (force)`);
+  _ingestInFlight = true;
+  
+  // Store the promise to prevent garbage collection in Lambda
+  _ingestionPromise = (async () => {
+    try {
+      await initialize({ force: true });
+      console.log(`[${nowIso()}] Repository ingestion completed successfully`);
+    } catch (err) {
+      console.error(`[${nowIso()}] Background initialization error:`, err.message);
+      throw err;
+    } finally {
+      _ingestInFlight = false;
+      _lastIngestAt = Date.now();
+      _ingestionPromise = null;
+    }
+  })();
+  
+  return _ingestionPromise;
+}
+
 // Lambda handler
 exports.handler = async (event, context) => {
   console.log(`[${new Date().toISOString()}] Lambda invoked with event:`, JSON.stringify(event));
@@ -1384,8 +1417,29 @@ exports.handler = async (event, context) => {
   try {
     if (event.rawPath && event.path !== event.rawPath) event.path = event.rawPath;
 
-    // Only wait for schema initialization (fast), not full ingestion
+    // Wait for schema initialization (fast)
     await ensureSchema();
+
+    // Trigger ingestion on first invocation if AUTO_INGEST_ON_START is enabled
+    // Note: In Lambda, we need to be careful about execution time
+    // The ingestion will be triggered asynchronously to avoid blocking the request
+    const shouldIngest = (!_initDone && process.env.AUTO_INGEST_ON_START !== 'false') ||
+                         event.queryStringParameters?.ingest === 'true';
+    if (shouldIngest && event.path !== '/api/ingest') {
+      // Trigger ingestion asynchronously - it will run in the background
+      // Store the promise to prevent garbage collection in Lambda
+      // Note: In Lambda, the execution context may persist between invocations,
+      // allowing background tasks to complete. However, for guaranteed execution,
+      // use the dedicated /api/ingest endpoint or CloudWatch Events.
+      console.log(`[${nowIso()}] Triggering background ingestion on Lambda invocation`);
+      const ingestionPromise = triggerIngestionIfNeeded();
+      // Ensure the promise is tracked (stored in _ingestionPromise internally)
+      ingestionPromise.catch(err => {
+        console.error(`[${nowIso()}] Background ingestion error:`, err.message);
+      });
+      // Note: We don't await here to avoid blocking the request, but the promise
+      // is stored internally to prevent garbage collection
+    }
 
     const response = await awsServerlessExpress.proxy(server, event, context, 'PROMISE').promise;
     console.log(`[${new Date().toISOString()}] Response headers:`, response.headers);
