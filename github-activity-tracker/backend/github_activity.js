@@ -112,7 +112,6 @@ async function initializeSchema() {
         pr_number INTEGER
       );
     `);
-    console.log("Database schema initialized");
   } catch (error) {
     console.error("Error initializing schema:", error.message);
     throw error;
@@ -173,10 +172,8 @@ async function getLatestDate(tableName, repoId, dateField) {
       [repoId]
     );
     if (result.rows.length > 0 && result.rows[0][dateField]) {
-      console.log(`Latest ${tableName} date for repo_id ${repoId}: ${result.rows[0][dateField]}`);
       return new Date(result.rows[0][dateField]);
     }
-    console.log(`No ${tableName} data for repo_id ${repoId}, using 30 days ago`);
     return DateTime.now().minus({ days: 30 }).toJSDate();
   } finally {
     client.release();
@@ -220,22 +217,18 @@ async function deleteOldData(repoId) {
       "DELETE FROM commits WHERE repository_id = $1 AND committed_at < $2",
       [repoId, thirtyDaysAgo]
     );
-    console.log(`Deleted old commits for repo_id: ${repoId}`);
     await client.query(
       "DELETE FROM pull_requests WHERE repository_id = $1 AND created_at < $2",
       [repoId, thirtyDaysAgo]
     );
-    console.log(`Deleted old PRs for repo_id: ${repoId}`);
     await client.query(
       "DELETE FROM issues WHERE repository_id = $1 AND created_at < $2",
       [repoId, thirtyDaysAgo]
     );
-    console.log(`Deleted old issues for repo_id: ${repoId}`);
     await client.query(
       "DELETE FROM reviews WHERE repository_id = $1 AND created_at < $2",
       [repoId, thirtyDaysAgo]
     );
-    console.log(`Deleted old reviews for repo_id: ${repoId}`);
   } finally {
     client.release();
   }
@@ -243,7 +236,6 @@ async function deleteOldData(repoId) {
 
 // Clean duplicates
 async function cleanDuplicateCommits(repoId) {
-  console.log(`Cleaning duplicate commits for repo_id: ${repoId}`);
   const client = await pool.connect();
   try {
     await client.query(`
@@ -255,7 +247,6 @@ async function cleanDuplicateCommits(repoId) {
         GROUP BY repository_id, message, author, committed_at, branch
       ) AND repository_id = $1
     `, [repoId]);
-    console.log(`Cleaned duplicate commits for repo_id: ${repoId}`);
   } catch (error) {
     console.error(`Error cleaning duplicate commits: ${error.message}`);
   } finally {
@@ -264,7 +255,6 @@ async function cleanDuplicateCommits(repoId) {
 }
 
 async function cleanDuplicateReviews(repoId) {
-  console.log(`Cleaning duplicate reviews for repo_id: ${repoId}`);
   const client = await pool.connect();
   try {
     await client.query(`
@@ -276,7 +266,6 @@ async function cleanDuplicateReviews(repoId) {
         GROUP BY repository_id, review_id, author, pr_number
       ) AND repository_id = $1
     `, [repoId]);
-    console.log(`Cleaned duplicate reviews for repo_id: ${repoId}`);
   } catch (error) {
     console.error(`Error cleaning duplicate reviews: ${error.message}`);
   } finally {
@@ -285,7 +274,6 @@ async function cleanDuplicateReviews(repoId) {
 }
 
 async function cleanDuplicatePRs(repoId) {
-  console.log(`Cleaning duplicate PRs for repo_id: ${repoId}`);
   const client = await pool.connect();
   try {
     await client.query(`
@@ -297,7 +285,6 @@ async function cleanDuplicatePRs(repoId) {
         GROUP BY repository_id, number
       ) AND repository_id = $1
     `, [repoId]);
-    console.log(`Cleaned duplicate PRs for repo_id: ${repoId}`);
   } catch (error) {
     console.error(`Error cleaning duplicate PRs: ${error.message}`);
   } finally {
@@ -507,7 +494,6 @@ async function insertReviewsBatched(rows, batchSize = 20) {
 
 async function queryGraphQL(query, variables = {}) {
   const t0 = Date.now();
-  console.log(`[${nowIso()}] GraphQL query: ${query.slice(0, 100)}...`, variables);
 
   try {
     const response = await axios.post(
@@ -518,7 +504,6 @@ async function queryGraphQL(query, variables = {}) {
 
     const remaining = response.headers["x-ratelimit-remaining"] ?? "N/A";
     const resetTime = parseInt(response.headers["x-ratelimit-reset"] || "0", 10);
-    console.log(`[${nowIso()}] GraphQL rate limit: ${remaining}, took ${Date.now() - t0}ms`);
 
     if (response.status !== 200) {
       throw new Error(`GraphQL request failed: ${response.status}`);
@@ -645,13 +630,11 @@ query(
 `;
 
 async function storeRepositoryData(repoName) {
-  console.log(`[${nowIso()}] Processing ${repoName}...`);
   const [owner, name] = repoName.split('/');
 
   try {
     const repo = await getOrCreateRepository(repoName);
     const repoId = repo.id;
-    console.log(`[${nowIso()}] Repository ID: ${repoId}`);
 
     // Hygiene
     await deleteOldData(repoId);
@@ -774,7 +757,6 @@ async function storeRepositoryData(repoName) {
       afterIssues = repoData.issues?.pageInfo?.endCursor || afterIssues;
       afterReviews = prs.find(p => p.reviews?.pageInfo?.hasNextPage)?.reviews?.pageInfo?.endCursor || afterReviews;
 
-      console.log(`[${nowIso()}] Fetched page for ${repoName}: ${allCommits.length} commits, ${prs.length} PRs, ${issues.length} issues, ${reviews.length} reviews`);
     }
 
     // Insert data
@@ -783,8 +765,6 @@ async function storeRepositoryData(repoName) {
     const insertedIssues = await insertIssues(repoId, issueRows);
     const insertedReviews = await insertReviewsBatched(reviewRows);
 
-    console.log(`[${nowIso()}] Inserted for ${repoName}: ${insertedCommits} commits, ${insertedPRs} PRs, ${insertedIssues} issues, ${insertedReviews} reviews`);
-    console.log(`[${nowIso()}] Processed ${repoName}`);
   } catch (err) {
     console.error(`[${nowIso()}] Error processing ${repoName}: ${err.message}`);
     throw err;
@@ -834,7 +814,6 @@ async function withRetry(taskFn, { tries = 3, baseMs = 2000, capMs = 60000 } = {
       // jitter
       waitMs = Math.min(capMs, Math.round(waitMs * (0.8 + Math.random() * 0.4)));
 
-      console.warn(`[${nowIso()}] Retry in ${Math.ceil(waitMs/1000)}s (attempt ${attempt}/${tries}): ${e?.message || e}`);
       await sleep(waitMs);
       delay = Math.min(capMs, delay * 2);
     }
@@ -862,7 +841,6 @@ async function initialize({ force = false } = {}) {
 
       const repos = loadRepositories();
       if (!Array.isArray(repos) || repos.length === 0) {
-        console.log(`[${nowIso()}] No repositories to ingest. Done.`);
         _initDone = true;
         return;
       }
@@ -872,7 +850,6 @@ async function initialize({ force = false } = {}) {
       const maxRepos = Number(process.env.INGEST_MAX_REPOS || 0);
 
       const toIngest = maxRepos > 0 ? repos.slice(0, maxRepos) : repos;
-      console.log(`[${nowIso()}] Ingest start: ${toIngest.length}/${repos.length} repos, conc=${concurrency}, retries=${maxRetries}`);
 
       const limit = createLimiter(concurrency);
       const tasks = toIngest.map(repo =>
@@ -881,7 +858,6 @@ async function initialize({ force = false } = {}) {
           try {
             // await handleRateLimit();
             await withRetry(() => storeRepositoryData(repo), { tries: maxRetries });
-            console.log(`[${nowIso()}] ✅ Ingested ${repo} in ${Date.now() - start}ms`);
             return { repo, ok: true };
           } catch (e) {
             console.error(`[${nowIso()}] ❌ Failed ${repo}: ${e.message}`);
@@ -895,10 +871,8 @@ async function initialize({ force = false } = {}) {
       const ok = flat.filter(r => r.ok).length;
       const fail = flat.length - ok;
 
-      console.log(`[${nowIso()}] Initialization complete in ${Date.now() - t0}ms. Success=${ok}, Failed=${fail}`);
       if (fail) {
         const list = flat.filter(r => !r.ok).map(r => `${r.repo}: ${r.error}`);
-        console.warn(`Failures (${fail}):\n- ${list.join('\n- ')}`);
       }
 
       _initDone = true;
@@ -958,11 +932,6 @@ app.get('/api/repositories', async (req, res) => {
     const total = result.rows[0]?.total ? Number(result.rows[0].total) : 0;
     const data = result.rows.map(({ total: _t, ...r }) => r);
 
-    console.log(
-      `[${new Date().toISOString()}] [origin: ${origin}] Repositories fetched: ${data.length}/total=${total}, ` +
-      `q="${q}", order=${safeOrder} ${safeDir}, offset=${off}, limit=${lim}, ${Date.now() - t0}ms`
-    );
-
     res.set('Cache-Control', 'private, max-age=30'); // tiny cache for UI snappiness
     return res.json({
       data,
@@ -995,7 +964,6 @@ app.get('/api/repository/:id', async (req, res) => {
   const isProbablyValid =
     /^[0-9]+$/.test(id) || /^[0-9a-fA-F-]{8,}$/.test(id);
   if (!isProbablyValid) {
-    console.warn(`[${new Date().toISOString()}] [origin: ${origin}] Bad repo id: "${id}"`);
     return res.status(400).json({ error: 'Invalid repository id' });
   }
 
@@ -1004,7 +972,6 @@ app.get('/api/repository/:id', async (req, res) => {
     const result = await pool.query(query, [id]);
 
     if (result.rows.length === 0) {
-      console.log(`[${new Date().toISOString()}] [origin: ${origin}] Repo not found: ${id}`);
       return res.status(404).json({ error: 'Repository not found' });
     }
 
@@ -1021,9 +988,6 @@ app.get('/api/repository/:id', async (req, res) => {
     res.set('ETag', etag);
     res.set('Cache-Control', 'private, max-age=60');
 
-    console.log(
-      `[${new Date().toISOString()}] [origin: ${origin}] Repo fetched: ${row.id} (${Date.now() - t0}ms)`
-    );
     return res.json(row);
   } catch (err) {
     console.error(
@@ -1076,16 +1040,8 @@ app.get('/api/users', async (req, res) => {
 
     params.push(lim);
 
-    // ✅ Log SQL & parameters for debugging
-    console.log(`[${new Date().toISOString()}] SQL: ${sql.trim().replace(/\s+/g, ' ')}`);
-    console.log(`[${new Date().toISOString()}] Params: ${JSON.stringify(params)}`);
-
     const result = await pool.query(sql, params);
     const authors = result.rows.map(r => r.author);
-
-    console.log(
-      `[${new Date().toISOString()}] [origin: ${origin}] Fetched ${authors.length} unique authors in ${Date.now() - t0}ms`
-    );
 
     res.json(authors);
   } catch (err) {
@@ -1192,9 +1148,7 @@ app.get('/api/activity', async (req, res) => {
       ORDER BY created_at DESC
     `;
 
-    console.log(`[${new Date().toISOString()}] Executing activity query:`, query, params);
     const result = await pool.query(query, params);
-    console.log(`[${new Date().toISOString()}] Fetched ${result.rows.length} activity records`);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching activities:', err);
@@ -1254,11 +1208,6 @@ app.get('/api/stats/:repositoryId', async (req, res) => {
     const result = await pool.query(sql, params);
     const row = result.rows[0] || { commits: 0, issues: 0, pull_requests: 0, reviews: 0 };
 
-    console.log(
-      `[${new Date().toISOString()}] [origin: ${origin}] Stats repo=${repositoryId} ` +
-      `range=${dateRange || 'all'} took ${Date.now() - t0}ms`
-    );
-
     res.json({
       commits: Number(row.commits) || 0,
       issues: Number(row.issues) || 0,
@@ -1292,9 +1241,7 @@ async function ingestHandler(req, res) {
   const t0 = Date.now();
   
   try {
-    console.log(`[${nowIso()}] Manual ingestion triggered via /api/ingest`);
     await triggerIngestionIfNeeded();
-    console.log(`[${nowIso()}] Ingestion completed in ${Date.now() - t0}ms`);
     return res.json({ success: true, message: 'Ingestion triggered successfully' });
   } catch (err) {
     console.error(`[${nowIso()}] Error triggering ingestion:`, err.message);
@@ -1337,12 +1284,10 @@ app.post('/api/addRepo', async (req, res) => {
 
     if (String(sync).toLowerCase() === 'true') {
       await runIngestion();
-      console.log(`[${new Date().toISOString()}] [origin: ${origin}] addRepo (sync) ${normalized} in ${Date.now() - t0}ms`);
       return res.json({ success: true, repository: repo, ingested: true });
     } else {
       // fire-and-forget (don’t block request)
       setImmediate(runIngestion);
-      console.log(`[${new Date().toISOString()}] [origin: ${origin}] addRepo (async) ${normalized} in ${Date.now() - t0}ms`);
       // 202 Accepted is semantically correct when background work continues
       res.status(202).json({ success: true, repository: repo, ingested: false, message: 'Ingestion scheduled' });
     }
@@ -1355,7 +1300,6 @@ app.post('/api/addRepo', async (req, res) => {
     if (status === 403) {
       return res.status(403).json({ error: 'Access forbidden by GitHub (check token scopes or rate limits)' });
     }
-    console.error(`[${new Date().toISOString()}] [origin: ${origin}] Error adding repository ${repoName}:`, err?.message || err);
     res.status(500).json({ error: 'Failed to add repository' });
   }
 });
@@ -1368,7 +1312,6 @@ let _schemaInitDone = false;
 let _schemaInitPromise = null;
 
 async function ensureSchema() {
-  console.log(`[${nowIso()}] Ensuring schema initialization...`);
 
   if (_schemaInitDone) return;
   if (_schemaInitPromise) {
@@ -1380,7 +1323,6 @@ async function ensureSchema() {
     try {
       await initializeSchema();
       _schemaInitDone = true;
-      console.log(`[${nowIso()}] Schema initialization complete`);
     } catch (err) {
       console.error(`[${nowIso()}] Schema initialization error:`, err.message);
       throw err;
@@ -1397,24 +1339,20 @@ let _ingestionPromise = null;
 async function triggerIngestionIfNeeded() {
   const now = Date.now();
   if (_ingestInFlight) {
-    console.log(`[${nowIso()}] Ingestion already in flight, skipping trigger`);
     // Return the existing promise if one is running
     return _ingestionPromise || Promise.resolve();
   }
   
   if (now - _lastIngestAt < INGEST_MIN_INTERVAL_MS) {
-    console.log(`[${nowIso()}] Ingestion recently ran (${Math.round((now - _lastIngestAt)/1000)}s ago), skipping trigger`);
     return Promise.resolve();
   }
   
-  console.log(`[${nowIso()}] Triggering repository ingestion (force)`);
   _ingestInFlight = true;
   
   // Store the promise to prevent garbage collection in Lambda
   _ingestionPromise = (async () => {
     try {
       await initialize({ force: true });
-      console.log(`[${nowIso()}] Repository ingestion completed successfully`);
     } catch (err) {
       console.error(`[${nowIso()}] Background initialization error:`, err.message);
       throw err;
