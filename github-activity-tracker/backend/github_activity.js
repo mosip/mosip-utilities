@@ -695,19 +695,35 @@ async function storeRepositoryData(repoName) {
         throw new Error(`Repository ${repoName} not found or inaccessible`);
       }
 
-      // Process commits
-      const branches = (repoData.branches?.nodes || []).filter(branch =>
-          branch.name === "develop"
-      );
+      // Process commits from all branches
+      const defaultBranchName = repoData.defaultBranchRef?.name;
+      const allRefs = repoData.refs?.nodes || [];
       
-      const defaultBranchCommits = repoData.defaultBranchRef?.target?.history?.nodes || [];
-      const branchCommits = branches.flatMap(b => b.target?.history?.nodes || []);
-      const allCommits = [...defaultBranchCommits, ...branchCommits].map(c => ({
+      // Filter out default branch from refs to avoid processing it twice
+      // (default branch is already processed separately)
+      const otherBranches = allRefs.filter(branch => branch.name !== defaultBranchName);
+
+      // Get commits from default branch with branch name
+      const defaultBranchCommits = (repoData.defaultBranchRef?.target?.history?.nodes || []).map(c => ({
+        commit: c,
+        branch: defaultBranchName
+      }));
+      // Get commits from all other branches with their branch names
+      const branchCommits = otherBranches.flatMap(branch => 
+        (branch.target?.history?.nodes || []).map(c => ({
+          commit: c,
+          branch: branch.name
+        }))
+      );
+
+      
+      // Combine all commits and map to final format
+      const allCommits = [...defaultBranchCommits, ...branchCommits].map(({ commit: c, branch }) => ({
         repository_id: repoId,
         message: c.message || '',
         author: c.author?.name || c.author?.user?.login || 'unknown',
         committed_at: formatDate(c.committedDate),
-        branch: branches.find(b => b.target?.history?.nodes.includes(c))?.name || repoData.defaultBranchRef?.name,
+        branch: branch || 'unknown',
         created_at: nowIso()
       }));
       commitRows.push(...allCommits);
@@ -748,7 +764,7 @@ async function storeRepositoryData(repoName) {
       // Update pagination cursors
       hasNextPage = (
         repoData.defaultBranchRef?.target?.history?.pageInfo?.hasNextPage ||
-        branches.some(b => b.target?.history?.pageInfo?.hasNextPage) ||
+        otherBranches.some(b => b.target?.history?.pageInfo?.hasNextPage) ||
         repoData.pullRequests?.pageInfo?.hasNextPage ||
         repoData.issues?.pageInfo?.hasNextPage ||
         prs.some(p => p.reviews?.pageInfo?.hasNextPage)
@@ -1273,7 +1289,6 @@ function normalizeRepoInput(input) {
 
 // Dedicated endpoint to trigger ingestion
 app.post('/api/ingest', async (req, res) => {
-  const origin = req.headers.origin || '*';
   const t0 = Date.now();
   
   try {
