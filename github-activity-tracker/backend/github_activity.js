@@ -1288,7 +1288,7 @@ function normalizeRepoInput(input) {
 }
 
 // Dedicated endpoint to trigger ingestion
-app.post('/api/ingest', async (req, res) => {
+async function ingestHandler(req, res) {
   const t0 = Date.now();
   
   try {
@@ -1300,7 +1300,10 @@ app.post('/api/ingest', async (req, res) => {
     console.error(`[${nowIso()}] Error triggering ingestion:`, err.message);
     return res.status(500).json({ error: 'Failed to trigger ingestion', message: err.message });
   }
-});
+}
+
+app.post('/api/ingest', ingestHandler);
+app.get('/api/ingest', ingestHandler);
 
 app.post('/api/addRepo', async (req, res) => {
   const origin = req.headers.origin || '*';
