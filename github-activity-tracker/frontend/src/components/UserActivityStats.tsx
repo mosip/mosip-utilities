@@ -14,7 +14,7 @@ interface UserActivityStatsProps {
 }
 
 export function UserActivityStats({ activities }: UserActivityStatsProps) {
-  // Calculate stats per user
+  
   const userStats = activities.reduce<Record<string, UserStats>>((acc, activity) => {
     if (!acc[activity.author]) {
       acc[activity.author] = {
@@ -40,7 +40,7 @@ export function UserActivityStats({ activities }: UserActivityStatsProps) {
     return acc;
   }, {});
 
-  // Convert to array and sort by total activity
+  
   const sortedUsers = Object.values(userStats).sort((a, b) => {
     const totalA = a.commits + a.pullRequests + a.reviews;
     const totalB = b.commits + b.pullRequests + b.reviews;

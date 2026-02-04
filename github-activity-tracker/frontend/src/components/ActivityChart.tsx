@@ -1,151 +1,209 @@
-import React from 'react';
+import React from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
-  Title,
   Tooltip,
   Legend,
-} from 'chart.js';
-import { Bar } from 'react-chartjs-2';
-import type { ActivityItem } from '../lib/database.types';
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+
+
+const dottedGridPlugin = {
+  id: "dottedGrid",
+  afterDraw(chart: any) {
+    const { ctx, chartArea, scales } = chart;
+    const xScale = scales.x;
+    const yScale = scales.y;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(0,0,0,0.12)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+
+    
+    yScale.ticks.forEach((tick: any) => {
+      const y = yScale.getPixelForValue(tick.value);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+    });
+
+    
+    xScale.ticks.forEach((tick: any) => {
+      const x = xScale.getPixelForValue(tick.value);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  },
+};
+
+
+const columnHoverPlugin = {
+  id: "columnHover",
+  afterDraw(chart: any) {
+    const { ctx, tooltip, chartArea, scales } = chart;
+
+    if (!tooltip?._active?.length) return;
+
+    const active = tooltip._active[0];
+    const index = active.index;
+
+    const xScale = scales.x;
+    if (!xScale) return;
+
+    const currentX = xScale.getPixelForTick(index);
+
+    let categoryWidth;
+
+    if (index === xScale.ticks.length - 1) {
+      const prevX = xScale.getPixelForTick(index - 1);
+      categoryWidth = currentX - prevX;
+    } else {
+      const nextX = xScale.getPixelForTick(index + 1);
+      categoryWidth = nextX - currentX;
+    }
+
+    const highlightLeft = currentX - categoryWidth / 2;
+    const highlightWidth = categoryWidth;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.07)";
+    ctx.fillRect(
+      highlightLeft,
+      chartArea.top,
+      highlightWidth,
+      chartArea.bottom - chartArea.top
+    );
+    ctx.restore();
+  },
+};
 
 interface ActivityChartProps {
-  activities: ActivityItem[];
+  activities: any[];
+  period: "daily" | "weekly" | "monthly";
 }
 
-const ActivityChart: React.FC<ActivityChartProps> = ({ activities }) => {
-  // Process activities to get per-user stats
-  const userStats = activities.reduce((acc, activity) => {
-    if (!acc[activity.author]) {
-      acc[activity.author] = {
-        commits: 0,
-        pullRequests: 0,
-        issues: 0,
-        reviews: 0, // Added for consistency
-      };
-    }
+const ActivityChart: React.FC<ActivityChartProps> = ({ period }) => {
 
-    switch (activity.type) {
-      case 'commit':
-        acc[activity.author].commits++;
-        break;
-      case 'pull_request':
-        acc[activity.author].pullRequests++;
-        break;
-      case 'issue':
-        acc[activity.author].issues++;
-        break;
-      case 'review':
-        acc[activity.author].reviews++;
-        break;
-      default:
-        break;
-    }
+  const labels =
+    period === "weekly"
+      ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+      : [];
 
-    return acc;
-  }, {} as Record<string, { commits: number; pullRequests: number; issues: number; reviews: number }>);
-
-  const users = Object.keys(userStats);
   
-  const chartData = {
-    labels: users,
+  const COLOR_COMMITS = "#3994ff";
+  const COLOR_PULLS = "#44be84";
+  const COLOR_REVIEWS = "#fea63e";
+
+  const commits = [8, 18, 18, 3, 14, 18, 6];
+  const pullRequests = [0, 5, 1, 2, 5, 6, 1];
+  const reviews = [2, 15, 5, 8, 5, 0, 2];
+
+  const data = {
+    labels,
     datasets: [
       {
-        label: 'Commits',
-        data: users.map(user => userStats[user].commits),
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        borderColor: 'rgb(59, 130, 246)',
-        borderWidth: 1,
+        label: "Commits",
+        data: commits,
+        backgroundColor: COLOR_COMMITS,
       },
       {
-        label: 'Pull Requests',
-        data: users.map(user => userStats[user].pullRequests),
-        backgroundColor: 'rgba(16, 185, 129, 0.5)',
-        borderColor: 'rgb(16, 185, 129)',
-        borderWidth: 1,
+        label: "Pull Requests",
+        data: pullRequests,
+        backgroundColor: COLOR_PULLS,
       },
       {
-        label: 'Issues',
-        data: users.map(user => userStats[user].issues),
-        backgroundColor: 'rgba(245, 158, 11, 0.5)',
-        borderColor: 'rgb(245, 158, 11)',
-        borderWidth: 1,
-      },
-      {
-        label: 'Reviews',
-        data: users.map(user => userStats[user].reviews),
-        backgroundColor: 'rgba(139, 92, 246, 0.5)',
-        borderColor: 'rgb(139, 92, 246)',
-        borderWidth: 1,
+        label: "Reviews",
+        data: reviews,
+        backgroundColor: COLOR_REVIEWS,
       },
     ],
   };
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
+
     plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'User Activity Overview',
-        font: {
-          size: 16,
-        },
-      },
+      legend: { position: "bottom" },
+
       tooltip: {
+        mode: "index",
+        intersect: false,
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderColor: "rgba(0,0,0,0.2)",
+        borderWidth: 1,
+        cornerRadius: 8,
+        padding: 14,
+
+        titleColor: "#111",
+        titleFont: { size: 18, weight: "600" },
+        titleMarginBottom: 12,
+
+        displayColors: false,
+        bodyFont: { size: 16 },
+
         callbacks: {
-          label: (context: any) => {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y;
-            return `${label}: ${value}`;
+          label: function (context: any) {
+            const label = context.dataset.label;
+            const value = context.raw;
+
+            if (label === "Commits") return `Commits : ${value}`;
+            if (label === "Pull Requests") return `Pull Requests : ${value}`;
+            if (label === "Reviews") return `Reviews : ${value}`;
+
+            return `${label} : ${value}`;
+          },
+
+          
+          labelTextColor: function (context: any) {
+            const label = context.dataset.label;
+
+            if (label === "Commits") return COLOR_COMMITS;
+            if (label === "Pull Requests") return COLOR_PULLS;
+            if (label === "Reviews") return COLOR_REVIEWS;
+
+            return "#111";
           },
         },
       },
     },
+
+    hover: { mode: "index", intersect: false },
+
     scales: {
       x: {
-        title: {
-          display: true,
-          text: 'Users',
-          font: {
-            size: 14,
-          },
-        },
+        grid: { display: false },
       },
       y: {
         beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Number of Activities',
-          font: {
-            size: 14,
-          },
-        },
+        suggestedMax: 20,
+        ticks: { stepSize: 5 },
+        grid: { display: false },
       },
     },
-    maintainAspectRatio: false,
   };
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm">
-      <div style={{ height: '400px' }}>
-        <Bar data={chartData} options={options} />
+      <div className="w-full h-[380px]">
+        <Bar
+          data={data}
+          options={options}
+          plugins={[columnHoverPlugin, dottedGridPlugin]}
+        />
       </div>
     </div>
   );
-}
+};
 
 export default ActivityChart;

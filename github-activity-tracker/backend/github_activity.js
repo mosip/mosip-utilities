@@ -36,7 +36,7 @@ const pool = new Pool({
   database: RDS_DATABASE,
   user: RDS_USER,
   password: RDS_PASSWORD,
-  ssl: { rejectUnauthorized: false } // Required for AWS RDS
+  ssl: RDS_HOST === "localhost" ? false : { rejectUnauthorized: false } // Required for AWS RDS
 });
 
 // Test database connection
