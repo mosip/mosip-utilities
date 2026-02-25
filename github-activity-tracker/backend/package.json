@@ -1,9 +1,10 @@
 {
   "name": "github-activity-backend",
   "version": "1.0.0",
-  "main": "github_activity.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node github_activity.js"
+    "start": "node app.js",
+    "migrate": "node migrations/runMigrations.js"
   },
   "dependencies": {
     "aws-serverless-express": "^3.4.0",
