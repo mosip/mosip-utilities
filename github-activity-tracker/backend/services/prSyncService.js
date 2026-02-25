@@ -1,5 +1,6 @@
 const githubClient = require('../utils/githubClient');
 const pool = require('../db/dbPool');
+const { GITHUB, POSTGRES } = require('../config/errorCodes');
 
 /**
  * Sync pull requests for a single repository.
@@ -139,7 +140,7 @@ async function syncPRs(repoId) {
 
           totalProcessed += 1;
         } catch (prError) {
-          if (prError.code === '23505') {
+          if (prError.code === POSTGRES.UNIQUE_VIOLATION) {
             // Unique constraint on activity_events - skip duplicate
             continue;
           }
@@ -156,13 +157,12 @@ async function syncPRs(repoId) {
       if (apiError.response) {
         console.error('GitHub API status:', apiError.response.status);
         console.error('GitHub API response:', apiError.response.data);
-        // 422 = Validation Failed — usually means no access to repo or invalid query
-        if (apiError.response.status === 422) {
+        if (apiError.response.status === GITHUB.VALIDATION_FAILED) {
           const msg = apiError.response.data?.message || 'Validation Failed';
           const hint =
             'Your token may not have access to this repository, or the repo owner/name may be invalid.';
           const err = new Error(`${msg}. ${hint}`);
-          err.statusCode = 422;
+          err.statusCode = GITHUB.VALIDATION_FAILED;
           err.githubResponse = apiError.response.data;
           throw err;
         }

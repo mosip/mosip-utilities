@@ -6,6 +6,8 @@
 const express = require('express');
 const pool = require('../db/dbPool');
 const { syncReviews } = require('../services/reviewSyncService');
+const { HTTP, STATUS } = require('../config/errorCodes');
+const { DELAY_BETWEEN_REPOS_MS } = require('../config/syncConfig');
 
 const router = express.Router();
 
@@ -21,7 +23,7 @@ router.post('/admin/sync/reviews', async (req, res) => {
 
     if (totalRepos === 0) {
       return res.json({
-        status: 'success',
+        status: STATUS.SUCCESS,
         message: 'No repositories found in database',
         repos_processed: 0,
         reviews_processed: 0,
@@ -49,14 +51,13 @@ router.post('/admin/sync/reviews', async (req, res) => {
         continue;
       }
 
-      // Small delay between repos to avoid rate limits (except for the last one)
       if (i < repos.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_REPOS_MS));
       }
     }
 
     return res.json({
-      status: 'success',
+      status: STATUS.SUCCESS,
       repos_processed: reposProcessed,
       total_repos: totalRepos,
       reviews_processed: totalReviewsProcessed,
@@ -66,15 +67,15 @@ router.post('/admin/sync/reviews', async (req, res) => {
     console.error('Error stack:', error.stack);
 
     if (error.message && error.message.includes('not found')) {
-      return res.status(404).json({
-        status: 'error',
+      return res.status(HTTP.NOT_FOUND).json({
+        status: STATUS.ERROR,
         message: error.message,
         reviews_processed: 0,
       });
     }
 
-    return res.status(500).json({
-      status: 'error',
+    return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
+      status: STATUS.ERROR,
       message: 'Failed to sync pull request reviews',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       reviews_processed: 0,

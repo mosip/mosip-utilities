@@ -1,6 +1,7 @@
 const axios = require('axios');
 require('dotenv').config();
 const pool = require('../db/dbPool');
+const { POSTGRES } = require('../config/errorCodes');
 
 const GRAPHQL_URL = 'https://api.github.com/graphql';
 const PR_PAGE_SIZE = 50;
@@ -216,7 +217,7 @@ async function syncReviews(repoId) {
 
             totalProcessed += 1;
           } catch (err) {
-            if (err.code === '23505') continue;
+            if (err.code === POSTGRES.UNIQUE_VIOLATION) continue;
             console.error(`Error processing review ${review.id}:`, err.message);
           }
         }

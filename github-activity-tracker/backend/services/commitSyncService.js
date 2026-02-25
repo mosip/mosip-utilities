@@ -1,5 +1,6 @@
 const githubClient = require('../utils/githubClient');
 const pool = require('../db/dbPool');
+const { POSTGRES } = require('../config/errorCodes');
 
 /**
  * Sync commits for a single repository.
@@ -154,7 +155,7 @@ async function syncCommits(repoId) {
             );
           } catch (eventError) {
             // If unique constraint violation, skip (already processed)
-            if (eventError.code === '23505') {
+            if (eventError.code === POSTGRES.UNIQUE_VIOLATION) {
               console.log(`Commit ${commitSha} already exists in activity_events, skipping`);
             } else {
               throw eventError;
