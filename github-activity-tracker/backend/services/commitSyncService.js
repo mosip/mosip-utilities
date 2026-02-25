@@ -1,5 +1,5 @@
 const githubClient = require('../utils/githubClient');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 
 /**
  * Sync commits for a single repository.
@@ -32,7 +32,7 @@ async function syncCommits(repoId) {
     throw new Error(`Repository ${repoId} missing owner or name`);
   }
 
-  // Determine since date: use last_commits_sync_at if exists, otherwise 1 year ago
+  // Incremental sync: only fetch commits after last sync; first run = last 1 year
   let sinceDate = null;
   if (last_commits_sync_at) {
     sinceDate = new Date(last_commits_sync_at);
@@ -110,7 +110,7 @@ async function syncCommits(repoId) {
             continue;
           }
 
-          // Upsert into github_users using github_user_id as unique key
+          // Ensure user exists; get our internal id for foreign keys
           const userResult = await pool.query(
             `
               INSERT INTO github_users (github_user_id, login, avatar_url, html_url, type)
@@ -128,7 +128,7 @@ async function syncCommits(repoId) {
 
           const userId = userResult.rows[0].id;
 
-          // Upsert into repo_users using (repo_id, user_id) as unique key
+          // Bump commit count and update first/last seen for this repo+user
           await pool.query(
             `
               INSERT INTO repo_users (repo_id, user_id, commits_count, first_seen_at, last_seen_at)
@@ -142,7 +142,7 @@ async function syncCommits(repoId) {
             [repoId, userId, commitDate]
           );
 
-          // Insert into activity_events with unique constraint on (event_type, event_id)
+          // Record commit as an activity event (skip if already present)
           try {
             await pool.query(
               `
@@ -193,7 +193,7 @@ async function syncCommits(repoId) {
 
   console.log(`Completed syncing commits for ${owner}/${name}. Total processed: ${totalProcessed}`);
 
-  // Update last_commits_sync_at only after successful sync
+  // Mark repo as synced so next run can use incremental since date
   await pool.query(
     'UPDATE repos SET last_commits_sync_at = NOW() WHERE github_repo_id = $1',
     [repoId]

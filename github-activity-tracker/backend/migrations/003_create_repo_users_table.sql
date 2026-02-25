@@ -1,11 +1,13 @@
--- Create repo_users table
+-- Per-repo activity counts per user (commits, PRs, reviews). One row per (repo, user).
 CREATE TABLE IF NOT EXISTS repo_users (
   repo_id BIGINT NOT NULL,
   user_id INTEGER NOT NULL,
   commits_count INTEGER DEFAULT 0,
+  prs_count INTEGER DEFAULT 0,
+  reviews_count INTEGER DEFAULT 0,
   first_seen_at TIMESTAMP,
   last_seen_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  inserted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (repo_id, user_id),
   FOREIGN KEY (repo_id) REFERENCES repos(github_repo_id) ON DELETE CASCADE,

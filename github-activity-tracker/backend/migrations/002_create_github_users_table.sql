@@ -1,4 +1,4 @@
--- Create github_users table
+-- GitHub users (committers, PR authors, reviewers). id = internal PK; github_user_id = GitHub API user id.
 CREATE TABLE IF NOT EXISTS github_users (
   id SERIAL PRIMARY KEY,
   github_user_id BIGINT UNIQUE NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS github_users (
   avatar_url TEXT,
   html_url TEXT,
   type VARCHAR(50),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  inserted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

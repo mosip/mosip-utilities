@@ -1,5 +1,5 @@
 const githubClient = require('../utils/githubClient');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 
 /**
  * Sync all public repositories for a GitHub organization into the `repos` table.
@@ -19,6 +19,7 @@ async function syncRepos(org) {
   let page = 1;
   let totalProcessed = 0;
 
+  // Paginate through all public repos for the org (GitHub returns up to 100 per page)
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -32,7 +33,7 @@ async function syncRepos(org) {
       });
 
       const repos = response.data || [];
-      console.log(`Fetched ${repos} repos from GitHub API`);
+      console.log(`Fetched ${repos.length} repos from GitHub API`);
 
       if (!Array.isArray(repos) || repos.length === 0) {
         console.log(`No more repos found. Total processed: ${totalProcessed}`);
@@ -43,7 +44,6 @@ async function syncRepos(org) {
 
       for (const repo of repos) {
         console.log(`Processing repo: ${repo.full_name} (ID: ${repo.id})`);
-        console.log(repo)
         try {
           const {
             id: github_repo_id,
@@ -51,11 +51,10 @@ async function syncRepos(org) {
             name,
             full_name,
           } = repo;
-          
-          console.log(`Extracted data - ID: ${github_repo_id}, Name: ${name}, Full Name: ${full_name}`);
-          
+
           const ownerLogin = owner && owner.login ? owner.login : null;
 
+          // Insert or update by GitHub repo id so re-syncs stay idempotent
           await pool.query(
             `
               INSERT INTO repos (github_repo_id, owner, name, full_name)

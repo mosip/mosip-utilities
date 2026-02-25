@@ -1,13 +1,17 @@
+/**
+ * Route: POST /admin/sync/reviews
+ * Syncs PR reviews for every repository in the repos table. No body required.
+ * Uses GitHub GraphQL API; skips reviews where the reviewer is the PR author.
+ */
 const express = require('express');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 const { syncReviews } = require('../services/reviewSyncService');
 
 const router = express.Router();
 
-// POST /admin/sync/reviews - syncs PR reviews for all repositories in database
 router.post('/admin/sync/reviews', async (req, res) => {
   try {
-    // Fetch all repositories from database
+    // Load all repos from DB; sync reviews for each
     const reposResult = await pool.query(
       'SELECT github_repo_id, owner, name, full_name FROM repos ORDER BY github_repo_id'
     );

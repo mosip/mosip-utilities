@@ -1,4 +1,5 @@
--- Create activity_events table
+-- One row per activity event (commit, pr, review). event_type + event_id = unique per event.
+-- created_at = when the event happened on GitHub; inserted_at = when we stored it in DB.
 CREATE TABLE IF NOT EXISTS activity_events (
   id SERIAL PRIMARY KEY,
   event_type VARCHAR(50) NOT NULL,
@@ -6,6 +7,7 @@ CREATE TABLE IF NOT EXISTS activity_events (
   repo_id BIGINT NOT NULL,
   user_id INTEGER NOT NULL,
   created_at TIMESTAMP NOT NULL,
+  html_url TEXT,
   inserted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (repo_id) REFERENCES repos(github_repo_id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES github_users(id) ON DELETE CASCADE,

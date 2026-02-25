@@ -1,13 +1,13 @@
 const axios = require('axios');
 require('dotenv').config();
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 
 const GRAPHQL_URL = 'https://api.github.com/graphql';
 const PR_PAGE_SIZE = 50;
 const REVIEW_PAGE_SIZE = 100;
 
 /**
- * Run a GitHub GraphQL query.
+ * Run a GitHub GraphQL query. Uses GITHUB_TOKEN (Bearer). Throws if response contains errors.
  */
 async function graphql(query, variables = {}) {
   const token = process.env.GITHUB_TOKEN;
@@ -30,6 +30,7 @@ async function graphql(query, variables = {}) {
   return data.data;
 }
 
+// Fetch one page of PRs with their reviews (for counting and event creation)
 const QUERY_PR_PAGE = `
   query($owner: String!, $name: String!, $prCursor: String, $prFirst: Int!, $reviewFirst: Int!) {
     repository(owner: $owner, name: $name) {
@@ -57,6 +58,7 @@ const QUERY_PR_PAGE = `
   }
 `;
 
+// Fetch next page of reviews for a single PR (when a PR has many reviews)
 const QUERY_PR_REVIEWS_PAGE = `
   query($prId: ID!, $reviewCursor: String, $reviewFirst: Int!) {
     node(id: $prId) {
@@ -149,6 +151,7 @@ async function syncReviews(repoId) {
         for (const review of reviews) {
           const reviewer = review.author;
           if (!reviewer || !reviewer.login) continue;
+          // Don't count self-reviews (author reviewing their own PR)
           if (prAuthorLogin && reviewer.login === prAuthorLogin) continue;
 
           const githubUserId = reviewer.databaseId;
@@ -237,7 +240,7 @@ async function syncReviews(repoId) {
     prCursor = prPageInfo.endCursor;
   }
 
-  // Update last_reviews_sync_at only after successful sync
+  // Mark repo as synced for incremental runs
   await pool.query(
     'UPDATE repos SET last_reviews_sync_at = NOW() WHERE github_repo_id = $1',
     [repoId]

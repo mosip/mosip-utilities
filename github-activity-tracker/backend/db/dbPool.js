@@ -1,3 +1,7 @@
+/**
+ * PostgreSQL connection pool used by all services and routes.
+ * Configure via .env: RDS_HOST, RDS_PORT, RDS_DATABASE, RDS_USER, RDS_PASSWORD.
+ */
 const { Pool } = require('pg');
 require('dotenv').config();
 

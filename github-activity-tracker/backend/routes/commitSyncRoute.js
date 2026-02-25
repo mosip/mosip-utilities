@@ -1,13 +1,17 @@
+/**
+ * Route: POST /admin/sync/commits
+ * Syncs commits for every repository already in the repos table. No body required.
+ * Calls syncCommits(repoId) per repo with a short delay between repos to reduce rate-limit risk.
+ */
 const express = require('express');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 const { syncCommits } = require('../services/commitSyncService');
 
 const router = express.Router();
 
-// POST /admin/sync/commits - syncs commits for all repositories in database
 router.post('/admin/sync/commits', async (req, res) => {
   try {
-    // Fetch all repositories from database
+    // Load all repos; sync runs only for repos already in DB (run /admin/sync/repos first)
     const reposResult = await pool.query(
       'SELECT github_repo_id, owner, name, full_name FROM repos ORDER BY github_repo_id'
     );

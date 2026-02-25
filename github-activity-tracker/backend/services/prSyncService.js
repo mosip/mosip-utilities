@@ -1,5 +1,5 @@
 const githubClient = require('../utils/githubClient');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 
 /**
  * Sync pull requests for a single repository.
@@ -31,7 +31,7 @@ async function syncPRs(repoId) {
     throw new Error(`Repository ${repoId} missing owner or name`);
   }
 
-  // Determine since date: use last_prs_sync_at if exists, otherwise 1 year ago
+  // Incremental sync: only PRs created after last sync; first run = last 1 year
   let sinceDate = null;
   if (last_prs_sync_at) {
     sinceDate = new Date(last_prs_sync_at);
@@ -42,7 +42,7 @@ async function syncPRs(repoId) {
   const sinceDateStr = sinceDate.toISOString().split('T')[0]; // YYYY-MM-DD format for GitHub Search API
 
   const perPage = 100;
-  const maxPage = 10; // GitHub Search API returns at most 1000 results (10 pages)
+  const maxPage = 10; // Search API cap: 1000 results = 10 pages × 100
   let page = 1;
   let totalProcessed = 0;
 

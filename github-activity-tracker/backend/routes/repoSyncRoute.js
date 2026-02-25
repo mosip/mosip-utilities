@@ -1,9 +1,13 @@
+/**
+ * Route: POST /admin/sync/repos
+ * Syncs all public repositories for a GitHub organization into the repos table.
+ * Body: { "org": "owner" } (e.g. { "org": "mosip" }).
+ */
 const express = require('express');
 const { syncRepos } = require('../services/syncRepos');
 
 const router = express.Router();
 
-// POST /admin/sync/repos
 router.post('/admin/sync/repos', async (req, res) => {
   const { org } = req.body || {};
 

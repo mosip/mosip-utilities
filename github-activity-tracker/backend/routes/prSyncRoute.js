@@ -1,13 +1,17 @@
+/**
+ * Route: POST /admin/sync/prs
+ * Syncs pull requests for every repository in the repos table. No body required.
+ * Uses GitHub Search API; 422 may mean the token has no access to a repo.
+ */
 const express = require('express');
-const pool = require('../db/db');
+const pool = require('../db/dbPool');
 const { syncPRs } = require('../services/prSyncService');
 
 const router = express.Router();
 
-// POST /admin/sync/prs - syncs PRs for all repositories in database
 router.post('/admin/sync/prs', async (req, res) => {
   try {
-    // Fetch all repositories from database
+    // Load all repos from DB; sync PRs for each
     const reposResult = await pool.query(
       'SELECT github_repo_id, owner, name, full_name FROM repos ORDER BY github_repo_id'
     );
