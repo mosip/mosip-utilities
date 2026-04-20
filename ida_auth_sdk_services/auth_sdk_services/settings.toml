@@ -1,0 +1,36 @@
+[mosip_auth]
+timestamp_format = "%Y-%m-%dT%H:%M:%S"
+ida_auth_version = '1.0'
+ida_auth_request_demo_id = 'mosip.identity.auth'
+ida_auth_request_kyc_id = 'mosip.identity.kyc'
+ida_auth_request_otp_id = 'mosip.identity.otp'
+ida_auth_env = 'Staging'
+authorization_header_constant = 'Authorization'
+partner_apikey = "541191"
+partner_misp_lk = "JGOEOYQmrFvRgtgRmpq4mFwVnAtSdFTUIxCVVm4bfz0vbTouyZ"
+partner_id = "partnermisp1"
+
+[mosip_auth_server]
+ida_auth_domain_uri = 'https://api-internal.dev3.mosip.net'
+ida_auth_url = 'https://api-internal.dev3.mosip.net/idauthentication/v1'
+
+
+[crypto_encrypt]
+symmetric_key_size = 256
+symmetric_nonce_size = 128
+symmetric_gcm_tag_size = 128
+# certificate from the below path is used to encrypt the Auth Request.
+encrypt_cert_path = "C:\\Users\\LAVISH\\Desktop\\idaAuthFinal\\ida-auth-sdk\\certificates\\ida_fir.pem"
+# used to decrypt the received response
+decrypt_p12_file_path = "C:\\Users\\LAVISH\\Desktop\\idaAuthFinal\\ida-auth-sdk\\certificates\\keystore.p12"
+decrypt_p12_file_password = "mosip"
+
+[crypto_signature]
+algorithm = 'RS256'
+sign_p12_file_path =  'C:\\Users\\LAVISH\\Desktop\\idaAuthFinal\\ida-auth-sdk\\certificates\\keystore.p12'
+sign_p12_file_password = 'mosip'
+
+[logging]
+log_file_path = 'authenticator.log'
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+loglevel = "DEBUG" # can be one of "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"
