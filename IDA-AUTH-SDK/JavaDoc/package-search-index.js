@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html"},{"l":"auth.sdk.java"},{"l":"auth.sdk.java.authenticator"},{"l":"auth.sdk.java.exceptions"},{"l":"auth.sdk.java.models"},{"l":"auth.sdk.java.utils"},{"l":"auth.sdk.models"},{"l":"examples"}];updateSearchResults();
