@@ -26,10 +26,19 @@ This folder **is** built by CI: `.github/workflows/push-trigger.yml`
 includes `SERVICE_LOCATION: openssl` in its Docker build matrix
 (`BASE_IMAGE_BUILD: true`).
 
-Generate a certificate via Docker, as documented in `README.md`:
+Generate a certificate via Docker. **`README.md`'s own example binds the
+volume to the host's `/etc/ssl`** (`--opt device=/etc/ssl`) — do not
+copy that as-is: the container can then overwrite the host's real
+system certificates, keys, or trust store. Use a dedicated, empty host
+directory instead:
 
 ```shell
-docker volume create --name gensslcerts --opt type=none --opt device=/etc/ssl --opt o=bind
+OPENSSL_OUTPUT_DIR="$(pwd)/openssl-output"
+mkdir -p "$OPENSSL_OUTPUT_DIR"
+docker volume create --name gensslcerts \
+  --opt type=none \
+  --opt device="$OPENSSL_OUTPUT_DIR" \
+  --opt o=bind
 ```
 
 ```shell

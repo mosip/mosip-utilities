@@ -28,16 +28,22 @@ libraries pipenv-style):
 ```
 
 Create working directories, then run for a file-based RID list or a
-date-range query (as documented in `Readme.md`):
+date-range query. **`Readme.md`'s own example runs `sudo python3
+./main.py`** — `sudo` starts a new shell that isn't inside the `pipenv`
+virtualenv, so `python3` resolves to the system interpreter and skips
+every `Pipfile` dependency (`psycopg2-binary`, `pandas`, etc.); it also
+runs the whole tool — which handles registration-processor DB
+credentials and MOSIP registration RIDs — as root for no reason this
+utility needs. Use `pipenv run` instead, which stays in the virtualenv
+without a privilege escalation:
 
 ```shell
 mkdir .venv logs output
-pipenv shell
-sudo python3 ./main.py --file
+pipenv run python ./main.py --file
 ```
 
 ```shell
-sudo python3 ./main.py --db
+pipenv run python ./main.py --db
 ```
 
 This folder is **not** in `.github/workflows/push-trigger.yml`'s Docker

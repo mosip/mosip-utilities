@@ -10,6 +10,23 @@ retention window. It runs as a Kubernetes CronJob (deployed via the Helm
 chart in `../helm/softhsm-backup` and the install script in
 `../deploy/softhsm-backup`).
 
+**Known gap, not something documentation alone can fix**: this tool
+writes MOSIP token key material to S3 (`main.py`'s `boto3.client('s3', ...)`
+uses whatever AWS credentials/region are passed in via env vars, with no
+`ServerSideEncryption`/KMS parameter on `upload_file`), and neither
+`../helm/softhsm-backup/values.yaml` nor its templates configure TLS
+enforcement, server-side encryption/KMS, a scoped-down S3 bucket
+policy, or audit logging — the ClusterRole in
+`templates/clusterrole.yaml` only covers Kubernetes RBAC (`pods`,
+`pods/exec`), not S3 IAM. `delete_old_s3_folders` also has unscoped
+`s3:DeleteObject` access to whatever bucket/prefix the deployment's AWS
+credentials permit. This needs real infrastructure work (a
+least-privilege IAM policy scoped to this CronJob's bucket/prefix, a
+bucket policy requiring TLS and enforcing SSE/KMS, and audit logging) —
+not something to invent placeholder ARNs/policies for here. Flag this
+if asked to review S3/backup security for this repo, and don't assume
+these controls exist just because token backups are involved.
+
 ## Technology Stack
 
 - Python 3.9 (Dockerfile base: `python:3.9-slim`)

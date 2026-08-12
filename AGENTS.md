@@ -5,14 +5,24 @@
 `mosip-utilities` is a collection of small, independent debugging and
 operational tools used by the MOSIP team to investigate and maintain data
 across MOSIP deployments. Per the repository README, every utility lives in
-its own top-level folder with its own `README.md` describing what it does
-and how to run it. There is no shared build system, shared source tree, or
+its own top-level folder with its own `README.md` (or, in
+`biometricVariationGenerator`'s three subfolders, `ReadMe.MD`) describing
+what it does and how to run it — check the actual filename/casing before
+assuming `README.md` exists. There is no shared build system, shared
+source tree, or
 shared runtime across the utilities — each folder is a standalone tool with
 its own technology stack (Java/Maven, Python, or a plain Dockerfile/shell
 script). The root README also notes this repository "should remain private"
 and that private utilities must not publish Docker images or artifacts, so
 check whether a given utility is meant to be public before wiring up any
-release/publish behavior for it.
+release/publish behavior for it. **This is already in tension with
+existing CI**: `.github/workflows/chart-lint-publish.yml` publishes
+`helm/**` charts to the public `https://mosip.github.io/mosip-helm` site
+when a GitHub release is published (or via manual `workflow_dispatch`
+with `CHART_PUBLISH=YES`) — that's a real, pre-existing publish path for
+otherwise-private-repo content, not something to silently extend. Flag
+this if asked to review chart-publishing behavior, and don't add a
+second one for a utility that isn't meant to be public.
 
 This root file is a hub/index. Each utility that has its own build/run
 story has its own `AGENTS.md` — read the one for the folder you are working

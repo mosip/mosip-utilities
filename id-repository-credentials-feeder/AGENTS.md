@@ -59,10 +59,27 @@ docker run -it -d -p 8092:8092 \
   -e spring_config_label_env=BRANCH \
   -e spring_config_url_env=CONFIG_SERVER_URL \
   -e spring_config_name_env=CONFIG_SERVER_NAME \
-  -Donline-verification-partner-ids=PARTNER_ID_1,PARTNER_ID_2 \
-  -Dskip-requesting-existing-credentials-for-partners=true \
+  -e olv_partner_ids_env=PARTNER_ID_1,PARTNER_ID_2 \
+  -e skip_existing_cred_requests_for_partner_env=true \
   docker-registry.mosip.io:5000/id-repository-credentials-feeder
 ```
+
+The container's `CMD` is **shell-form** (`CMD wget ...; java -D... -jar
+...`), with no `ENTRYPOINT`. Anything you pass on `docker run` *after*
+the image name replaces that `CMD` entirely rather than appending
+arguments to it — so `-Donline-verification-partner-ids=...`/
+`-Dskip-requesting-existing-credentials-for-partners=...` passed as
+trailing `docker run` arguments would not reach the `java` process at
+all (Docker would instead try to run a program literally named
+`-Donline-verification-partner-ids=...`, which doesn't exist, replacing
+the intended `wget`+`java` command). The only way to configure these
+two values is via the `-e olv_partner_ids_env=...`/
+`-e skip_existing_cred_requests_for_partner_env=...` environment
+variables shown above, which the `CMD`'s `-D` flags read from — matching
+`online-verification-partner-ids`/
+`skip-requesting-existing-credentials-for-partners` in the direct-run
+example above only by *system property name*, not by the env var name
+Docker needs.
 
 ## Configuration
 
