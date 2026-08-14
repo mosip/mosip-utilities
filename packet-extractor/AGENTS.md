@@ -28,14 +28,12 @@ libraries pipenv-style):
 ```
 
 Create working directories, then run for a file-based RID list or a
-date-range query. **`Readme.md`'s own example runs `sudo python3
-./main.py`** — `sudo` starts a new shell that isn't inside the `pipenv`
-virtualenv, so `python3` resolves to the system interpreter and skips
-every `Pipfile` dependency (`psycopg2-binary`, `pandas`, etc.); it also
-runs the whole tool — which handles registration-processor DB
-credentials and MOSIP registration RIDs — as root for no reason this
-utility needs. Use `pipenv run` instead, which stays in the virtualenv
-without a privilege escalation:
+date-range query. Use `pipenv run`, not `sudo python3` — `sudo` starts a
+new shell that isn't inside the `pipenv` virtualenv, so `python3` would
+resolve to the system interpreter and skip every `Pipfile` dependency
+(`psycopg2-binary`, `pandas`, etc.); it would also run the whole tool —
+which handles registration-processor DB credentials and MOSIP
+registration RIDs — as root for no reason this utility needs:
 
 ```shell
 mkdir .venv logs output
@@ -100,9 +98,9 @@ ones locally before running.
 
 ## Repository-Specific Considerations
 
-- `main.py` is documented to be run with `sudo` — confirm that is still
-  required before removing it, since it may only be needed for file
-  permissions in the original environment.
+- `main.py` is run via `pipenv run python`, not `sudo` — `Readme.md` and
+  this guide were both updated to drop `sudo` since it broke the pipenv
+  virtualenv (see Build & Test Commands above); do not reintroduce it.
 - This tool reads production-shaped RID/packet data; run it against
   staging/test data, not a live production DB, while iterating.
 

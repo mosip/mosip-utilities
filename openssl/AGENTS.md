@@ -26,11 +26,11 @@ This folder **is** built by CI: `.github/workflows/push-trigger.yml`
 includes `SERVICE_LOCATION: openssl` in its Docker build matrix
 (`BASE_IMAGE_BUILD: true`).
 
-Generate a certificate via Docker. **`README.md`'s own example binds the
-volume to the host's `/etc/ssl`** (`--opt device=/etc/ssl`) — do not
-copy that as-is: the container can then overwrite the host's real
-system certificates, keys, or trust store. Use a dedicated, empty host
-directory instead:
+Generate a certificate via Docker. Both `README.md` and the example below
+bind the volume to a dedicated, empty host directory rather than the
+host's real `/etc/ssl` — binding to the host's actual `/etc/ssl` would
+let the container overwrite real system certificates, keys, or trust
+store, so do not change this back:
 
 ```shell
 OPENSSL_OUTPUT_DIR="$(pwd)/openssl-output"
@@ -73,7 +73,8 @@ Environment variables (Dockerfile `ENV` defaults are empty):
   `$work_dir/ssl/certs` and `$work_dir/ssl/private`, and grants that user
   ownership of `/usr/bin/openssl` and `/etc/ssl/`.
 - `README.md` — build/run instructions, including the certificate-volume
-  setup used to persist output to the host's `/etc/ssl`.
+  setup used to persist output to a dedicated `OPENSSL_OUTPUT_DIR` on the
+  host.
 
 ## Development Workflow
 
@@ -81,7 +82,8 @@ Environment variables (Dockerfile `ENV` defaults are empty):
 2. Since this folder is in the CI Docker-build matrix, confirm
    `docker build -f Dockerfile .` still succeeds after any edit.
 3. Test by running the container with the documented volume mount and
-   checking the resulting cert/key under `/etc/ssl` on the host.
+   checking the resulting cert/key under `$OPENSSL_OUTPUT_DIR` on the
+   host.
 
 ## Pull Request Guidelines
 
@@ -92,9 +94,12 @@ Environment variables (Dockerfile `ENV` defaults are empty):
 
 ## Repository-Specific Considerations
 
-- The container is granted passwordless `sudo` and ownership of the
-  host-mounted `/etc/ssl` directory — be deliberate about any change that
-  widens what `entrypoint.sh` does with that access.
+- Inside the image, the container is granted passwordless `sudo` and
+  ownership of the container's own `/etc/ssl` — be deliberate about any
+  change that widens what `entrypoint.sh` does with that access. The
+  host-side volume mount is a separate, dedicated output directory (see
+  above), not the host's `/etc/ssl` — do not reintroduce a host `/etc/ssl`
+  bind mount.
 - Generated certificates/keys are self-signed and intended for
   sandbox/dev use per the README's example (`*.sandbox.xyz.net`) — do not
   present this tool's output as suitable for production TLS without
