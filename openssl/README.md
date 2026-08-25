@@ -12,7 +12,8 @@ docker build -t openssl:tagname -f Dockerfile .
 * Create a volume that points to a dedicated, empty host directory (do
   **not** point it at the host's `/etc/ssl` — that lets the container
   overwrite real system certificates, keys, or trust store).
-  ```
+
+  ```shell
   OPENSSL_OUTPUT_DIR="$(pwd)/openssl-output"
   mkdir -p "$OPENSSL_OUTPUT_DIR"
   docker volume create --name gensslcerts --opt type=none --opt device="$OPENSSL_OUTPUT_DIR" --opt o=bind

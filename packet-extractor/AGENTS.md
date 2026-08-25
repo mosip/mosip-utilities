@@ -28,12 +28,13 @@ libraries pipenv-style):
 ```
 
 Create working directories, then run for a file-based RID list or a
-date-range query. Use `pipenv run`, not `sudo python3` — `sudo` starts a
-new shell that isn't inside the `pipenv` virtualenv, so `python3` would
-resolve to the system interpreter and skip every `Pipfile` dependency
-(`psycopg2-binary`, `pandas`, etc.); it would also run the whole tool —
-which handles registration-processor DB credentials and MOSIP
-registration RIDs — as root for no reason this utility needs:
+date-range query. Use `pipenv run`, not `sudo python3` — `sudo python3`
+starts a new process, not a new shell, and that process isn't inside the
+`pipenv` virtualenv, so it would resolve to the system interpreter and
+skip every `Pipfile` dependency (`psycopg2-binary`, `pandas`, etc.); it
+would also run the whole tool — which handles registration-processor DB
+credentials and MOSIP registration RIDs — as root for no reason this
+utility needs:
 
 ```shell
 mkdir .venv logs output
