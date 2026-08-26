@@ -4,152 +4,104 @@ Parent guide: [../AGENTS.md](../AGENTS.md)
 
 ## Repository Overview
 
-`softhsm-backup` backs up SoftHSM token files from every pod in a given
-Kubernetes namespace to S3, and deletes backups older than a configured
-retention window. It runs as a Kubernetes CronJob (deployed via the Helm
-chart in `../helm/softhsm-backup` and the install script in
+Backs up SoftHSM token files from every pod in a K8s namespace to S3,
+deletes backups older than a retention window. Runs as a K8s CronJob
+(Helm chart in `../helm/softhsm-backup`, install script in
 `../deploy/softhsm-backup`).
 
-**Known gap, not something documentation alone can fix**: this tool
-writes MOSIP token key material to S3 (`main.py`'s `boto3.client('s3', ...)`
-uses whatever AWS credentials/region are passed in via env vars, with no
-`ServerSideEncryption`/KMS parameter on `upload_file`), and neither
-`../helm/softhsm-backup/values.yaml` nor its templates configure TLS
-enforcement, server-side encryption/KMS, a scoped-down S3 bucket
-policy, or audit logging — the ClusterRole in
-`templates/clusterrole.yaml` only covers Kubernetes RBAC (`pods`,
-`pods/exec`), not S3 IAM. `delete_old_s3_folders` also has unscoped
-`s3:DeleteObject` access to whatever bucket/prefix the deployment's AWS
-credentials permit. This needs real infrastructure work (a
-least-privilege IAM policy scoped to this CronJob's bucket/prefix, a
-bucket policy requiring TLS and enforcing SSE/KMS, and audit logging) —
-not something to invent placeholder ARNs/policies for here. Flag this
-if asked to review S3/backup security for this repo, and don't assume
-these controls exist just because token backups are involved.
+**Known security gap — not fixable via docs alone**: writes MOSIP token
+key material to S3 with no `ServerSideEncryption`/KMS on `main.py`'s
+`upload_file` call, and neither `values.yaml` nor its templates configure
+TLS enforcement, SSE/KMS, a scoped-down bucket policy, or audit logging
+(`clusterrole.yaml` only covers K8s RBAC, not S3 IAM). `delete_old_s3_folders`
+also has unscoped `s3:DeleteObject` on whatever bucket/prefix the deployment
+credentials allow. Needs real infra work (least-privilege IAM scoped to
+this CronJob's bucket/prefix, a TLS+SSE/KMS bucket policy, audit logging)
+— don't invent placeholder ARNs/policies here. Flag if asked to review S3/
+backup security; don't assume these controls exist just because tokens are
+involved.
 
 ## Technology Stack
 
-- Python 3.9 (Dockerfile base: `python:3.9-slim`)
+- Python 3.9 (`python:3.9-slim` base)
 - `boto3` (S3), `kubernetes` (in-cluster pod access via `kubectl cp`),
   `pytz` — see `requirements.txt`
-- Docker, deployed as a Kubernetes CronJob via the Helm chart in
-  `../helm/softhsm-backup`
 
 ## Build & Test Commands
 
-Install dependencies locally:
-
 ```shell
 pip install -r requirements.txt
-```
-
-Build the Docker image:
-
-```shell
 docker build -t softhsm-backup:local -f Dockerfile .
+../deploy/softhsm-backup/install.sh   # deploy/reinstall the CronJob
 ```
 
-This folder **is** built by CI: `.github/workflows/push-trigger.yml`
-includes `SERVICE_LOCATION: softhsm-backup` in its Docker build matrix
-(`BASE_IMAGE_BUILD: true`, `SQUASH_LAYERS: 15`).
-
-Deploy/reinstall the CronJob into a cluster using the install script in
-`../deploy/softhsm-backup`:
-
-```shell
-../deploy/softhsm-backup/install.sh
-```
-
-There is no automated test suite; validate `main.py` changes against a
-non-production namespace/bucket.
+In CI's Docker build matrix (`push-trigger.yml`, `SERVICE_LOCATION:
+softhsm-backup`, `BASE_IMAGE_BUILD: true`, `SQUASH_LAYERS: 15`). No
+automated test suite — validate `main.py` against a non-production
+namespace/bucket.
 
 ## Configuration
 
-Environment variables (set as Docker `ENV` defaults, overridden at
-`docker run`/Helm-values time):
+Docker `ENV` defaults, overridden at `docker run`/Helm-values time:
 
-- `S3_BUCKET` — target bucket (default `s3-bucket-name` — a placeholder,
-  not a real bucket).
-- `S3_BASE_FOLDER` — S3 prefix for backups (default `softhsmbackup`).
-- `NAMESPACE` — Kubernetes namespace to scan for pods (default `softhsm`).
-- `POD_TOKENS_PATH` — path inside each pod to copy via `kubectl cp`
-  (default `/softhsm/tokens`).
-- `S3_RETENTION_DAYS` — days to keep backups before deleting (default
-  `15`).
+- `S3_BUCKET` — target bucket (default `s3-bucket-name`, a placeholder).
+- `S3_BASE_FOLDER` — S3 prefix (default `softhsmbackup`).
+- `NAMESPACE` — K8s namespace to scan (default `softhsm`).
+- `POD_TOKENS_PATH` — path to `kubectl cp` from each pod (default
+  `/softhsm/tokens`).
+- `S3_RETENTION_DAYS` — days before deletion (default `15`).
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` — S3
-  credentials (default empty; must be supplied at run time, never
-  committed).
+  credentials (empty by default; supply at run time, never commit).
 
-`main.py` calls `config.load_incluster_config()`, so it expects to run
-inside a Kubernetes pod with a service account that can list pods and
-`kubectl cp` from the target namespace — it is not meant to run against
-`~/.kube/config` locally (the commented-out `load_kube_config()` line is
-for local debugging only, not the default path).
+`main.py` uses `config.load_incluster_config()` — expects to run inside a
+pod with a service account that can list pods and `kubectl cp` in the
+target namespace, not against a local `~/.kube/config` (the commented-out
+`load_kube_config()` is local-debug only).
 
 ## Project Structure Notes
 
 - `main.py` — lists pods in `NAMESPACE`, `kubectl cp`s each pod's
-  `POD_TOKENS_PATH` to a local temp folder, uploads it to S3, then deletes
-  S3 folders older than `S3_RETENTION_DAYS`.
-- `Dockerfile` — installs `kubectl`, sets up a non-root `mosip` user
-  (`container_user_uid=1001`), copies the repo, installs
-  `requirements.txt`.
-- `requirements.txt` — `boto3`, `kubernetes`, `pytz`.
-- `../deploy/softhsm-backup/` — `install.sh`/`delete.sh` for the
-  Kubernetes CronJob, plus a `README.md`.
-- `../helm/softhsm-backup/` — the Helm chart (`Chart.yaml`, `values.yaml`,
-  `templates/`) that actually defines the CronJob, ClusterRole/Binding,
-  ServiceAccount, ConfigMap, and Secret resources.
+  `POD_TOKENS_PATH` to a local temp folder, uploads to S3, deletes S3
+  folders older than `S3_RETENTION_DAYS`.
+- `Dockerfile` — installs `kubectl`, non-root `mosip` user
+  (`container_user_uid=1001`), installs `requirements.txt`.
+- `../deploy/softhsm-backup/` — `install.sh`/`delete.sh` + README.
+- `../helm/softhsm-backup/` — the Helm chart defining the CronJob,
+  ClusterRole/Binding, ServiceAccount, ConfigMap, Secret.
 
 ## Development Workflow
 
-1. Install `requirements.txt` locally for editing/linting `main.py`.
-2. If you change environment variables `main.py` reads, update the
-   matching defaults in `Dockerfile`'s `ENV` block and
-   `../helm/softhsm-backup/values.yaml` together.
-3. Since this folder is in the CI Docker-build matrix, confirm
-   `docker build -f Dockerfile .` still succeeds after dependency or
-   `WORKDIR` changes.
-4. Test `main.py` changes against a scratch namespace/S3 bucket — it
-   deletes real S3 objects once run.
-
-## Pull Request Guidelines
-
-- If you touch environment variables or the retention logic, update this
-  file, `../deploy/softhsm-backup/README.md`, and
-  `../helm/softhsm-backup/values.yaml` in the same PR so they stay
-  consistent.
-- Note which namespace/bucket you validated against, since there is no
-  automated test suite.
+1. `pip install -r requirements.txt` for local editing/linting.
+2. If you change an env var `main.py` reads, update `Dockerfile`'s `ENV`
+   and `../helm/softhsm-backup/values.yaml` together — and mention it plus
+   which namespace/bucket you tested against in the PR.
+3. Confirm `docker build -f Dockerfile .` succeeds after dependency/
+   `WORKDIR` changes (CI-built folder).
+4. Test against a scratch namespace/S3 bucket — real objects get deleted.
 
 ## Repository-Specific Considerations
 
-- `delete_old_s3_folders` parses folder names as
-  `...-DD-MM-YY-HH-MM-UTC` to determine age; changing the date-format
-  string used when uploading (`current_date = ...strftime(...)`) without
-  updating the parser will silently break retention cleanup.
-- The container needs a Kubernetes RBAC role with permission to list pods
-  and exec `kubectl cp` in `NAMESPACE` — see
-  `../helm/softhsm-backup/templates/clusterrole.yaml` /
-  `clusterrolebinding.yaml` for the granted permissions before changing
-  what `main.py` accesses.
+- `delete_old_s3_folders` parses folder names as `...-DD-MM-YY-HH-MM-UTC`
+  for age — changing the upload `strftime` format without updating the
+  parser silently breaks retention cleanup.
+- Pod-list/`kubectl cp` access is granted via
+  `../helm/softhsm-backup/templates/clusterrole.yaml`/
+  `clusterrolebinding.yaml` — check there before changing what `main.py`
+  accesses.
 
 ## Agent rules
 
 ### Do
 
-1. Keep `main.py`'s environment-variable names in sync with
-   `Dockerfile`'s `ENV` defaults and `../helm/softhsm-backup/values.yaml`.
-2. Confirm `docker build -f Dockerfile .` succeeds after changes, since
-   this folder is in the CI build matrix.
-3. Validate retention/date-parsing changes against a scratch S3
-   bucket/namespace before merging.
+1. Keep `main.py` env-var names in sync with `Dockerfile`'s `ENV` and
+   `values.yaml`.
+2. Confirm `docker build -f Dockerfile .` succeeds after changes.
+3. Validate retention/date-parsing changes against a scratch bucket.
 
 ### Do not
 
-1. Do not hardcode `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` or a real
-   `S3_BUCKET` name in source, `Dockerfile`, or Helm values.
-2. Do not run `main.py` against a production namespace or bucket while
-   testing — it deletes S3 objects older than `S3_RETENTION_DAYS`.
-3. Do not change the backup folder date-naming format without updating
-   `delete_old_s3_folders`'s parsing logic to match.
+1. Hardcode AWS credentials or a real `S3_BUCKET` name anywhere.
+2. Run `main.py` against a production namespace/bucket while testing.
+3. Change the backup date-naming format without updating
+   `delete_old_s3_folders`'s parser to match.
+</content>

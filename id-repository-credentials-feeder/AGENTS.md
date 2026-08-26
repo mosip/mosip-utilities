@@ -4,42 +4,32 @@ Parent guide: [../AGENTS.md](../AGENTS.md)
 
 ## Repository Overview
 
-`id-repository-credentials-feeder` is a one-time/on-demand Spring Batch job
-that requests credentials for a specified list of MOSIP ID-Repository
-partners. It reads the partner list from a VM argument (comma-separated
-partner IDs) and pulls `mosip_idrepo` database configuration from the
+One-time/on-demand Spring Batch job requesting credentials for a specified
+list of MOSIP ID-Repository partners. Reads the partner list from a VM arg
+(comma-separated partner IDs); pulls `mosip_idrepo` DB config from the
 ID-Repository properties file via Spring Cloud Config.
 
 ## Technology Stack
 
-- Java 11 (`maven.compiler.source`/`target` = 11 in `pom.xml`)
-- Maven, parented by `io.mosip.idrepository:id-repository-parent:1.2.0.1`
-  (resolved from the MOSIP Nexus repository — this module is not buildable
-  fully offline)
+- Java 11, Maven, parented by
+  `io.mosip.idrepository:id-repository-parent:1.2.0.1` (from MOSIP
+  Nexus — not buildable fully offline)
 - Spring Boot 2.0.2 + Spring Batch 4.0.1 + Spring Data JPA + Spring Cloud
   Config
-- PostgreSQL (runtime), H2 (test, see `src/main/resources/schema-h2.sql`)
-- JUnit 4 + Mockito/PowerMock for tests
+- PostgreSQL (runtime), H2 (test, `src/main/resources/schema-h2.sql`)
+- JUnit 4 + Mockito/PowerMock
 
 ## Build & Test Commands
 
-Build the jar (Spring Boot repackage is bound to the `spring-boot-maven-plugin`):
+**Not in `push-trigger.yml`'s Docker build matrix — no CI here. Build/test
+locally before opening a PR, and say so in the PR description.**
 
 ```shell
-mvn clean install
+mvn clean install   # build (spring-boot-maven-plugin repackage)
+mvn test            # unit tests only
 ```
 
-Run the unit tests only:
-
-```shell
-mvn test
-```
-
-This module is **not** part of `.github/workflows/push-trigger.yml`'s
-Docker build matrix, so there is no CI build for it in this repository —
-build and test it locally before opening a PR.
-
-Run the packaged job (VM args must precede `-jar`):
+Run the packaged jar (VM args must precede `-jar`):
 
 ```shell
 java -Dspring.cloud.config.uri=CONFIG_SERVER_URL \
@@ -51,7 +41,11 @@ java -Dspring.cloud.config.uri=CONFIG_SERVER_URL \
      -jar id-repository-credentials-feeder.jar
 ```
 
-There is also a `Dockerfile` in this folder for containerized runs:
+Containerized run — the Dockerfile's `CMD` is **shell-form** with no
+`ENTRYPOINT`, so anything passed after the image name on `docker run`
+*replaces* `CMD` entirely rather than appending to it. Configure via `-e`
+env vars only (names differ from the system-property names above — they're
+what the `CMD`'s `-D` flags read from):
 
 ```shell
 docker run -it -d -p 8092:8092 \
@@ -64,94 +58,61 @@ docker run -it -d -p 8092:8092 \
   docker-registry.mosip.io:5000/id-repository-credentials-feeder
 ```
 
-The container's `CMD` is **shell-form** (`CMD wget ...; java -D... -jar
-...`), with no `ENTRYPOINT`. Anything you pass on `docker run` *after*
-the image name replaces that `CMD` entirely rather than appending
-arguments to it — so `-Donline-verification-partner-ids=...`/
-`-Dskip-requesting-existing-credentials-for-partners=...` passed as
-trailing `docker run` arguments would not reach the `java` process at
-all (Docker would instead try to run a program literally named
-`-Donline-verification-partner-ids=...`, which doesn't exist, replacing
-the intended `wget`+`java` command). The only way to configure these
-two values is via the `-e olv_partner_ids_env=...`/
-`-e skip_existing_cred_requests_for_partner_env=...` environment
-variables shown above, which the `CMD`'s `-D` flags read from — matching
-`online-verification-partner-ids`/
-`skip-requesting-existing-credentials-for-partners` in the direct-run
-example above only by *system property name*, not by the env var name
-Docker needs.
-
 ## Configuration
 
-- `idrepo-credential-feeder-chunk-size` — chunk size for reading credential
-  requests from the DB table (`application.properties`, default 10).
-- `online-verification-partner-ids` — comma-separated Online_Verification
-  partner IDs credentials should be requested for (VM arg).
-- `skip-requesting-existing-credentials-for-partners` — set `true` to skip
-  partners that already have a credential request queued; default `false`
-  if unset (VM arg).
-- DB connection and other shared config comes from the ID-Repository
-  properties served by Spring Cloud Config — see
-  [`src/main/resources/bootstrap.properties`](src/main/resources/bootstrap.properties)
-  for the default context path/port.
-- No secrets are hardcoded in this module's source; DB credentials and
-  config-server coordinates are always supplied externally.
+- `idrepo-credential-feeder-chunk-size` — DB read chunk size
+  (`application.properties`, default 10).
+- `online-verification-partner-ids` — comma-separated partner IDs (VM arg).
+- `skip-requesting-existing-credentials-for-partners` — `true` skips
+  partners with a request already queued; default `false` (VM arg).
+- DB connection and shared config come from Spring Cloud Config — see
+  [`bootstrap.properties`](src/main/resources/bootstrap.properties) for
+  default context path/port.
+- No hardcoded secrets — DB credentials/config-server coordinates always
+  supplied externally.
 
 ## Project Structure Notes
 
 - `config/` — `CredentialsFeederConfig`, `CredentialsFeederJobConfig`
-  (Spring Batch job wiring).
+  (Spring Batch wiring).
 - `entity/` — JPA entities for `mosip_idrepo` tables (`Uin`,
   `UinBiometric`, `UinDocument`, `AuthtypeLock`, etc.).
 - `repository/` — Spring Data JPA repositories.
-- `step/` — `CredentialsFeedingWriter`, the batch step that requests
-  credentials.
-- `listener/BatchJobListener.java` — batch job lifecycle logging.
-- Tests live under `src/test/java/...` and mirror the `step`/root package
-  layout.
+- `step/CredentialsFeedingWriter` — the batch step requesting credentials.
+- `listener/BatchJobListener.java` — job lifecycle logging.
+- Tests under `src/test/java/...` mirror this layout.
 
 ## Development Workflow
 
-1. Run `mvn clean install` locally after any change — there is no CI job
-   in this repo that builds this module.
-2. Keep the parent-POM version pin (`id-repository-parent`) in sync with
-   what the rest of the `id-repository` service family expects; do not
-   bump it casually.
-3. Add/update tests under `src/test/java` for behavior changes to
-   `CredentialsFeedingWriter` or `BatchJobListener`.
-
-## Pull Request Guidelines
-
-- State in the PR description that you ran `mvn clean install`/`mvn test`
-  locally, since CI does not build this module.
-- Do not change the `online-verification-partner-ids` /
-  `skip-requesting-existing-credentials-for-partners` VM-arg contract
-  without updating this file and the module README together.
+1. Keep the `id-repository-parent` version pin in sync with the rest of the
+   `id-repository` service family — don't bump casually.
+2. Add/update tests under `src/test/java` for behavior changes to
+   `CredentialsFeedingWriter`/`BatchJobListener`.
+3. Don't change the `online-verification-partner-ids`/
+   `skip-requesting-existing-credentials-for-partners` VM-arg contract
+   without updating this file and the module README together.
 
 ## Repository-Specific Considerations
 
-- This job talks directly to the `mosip_idrepo` production-shaped schema;
-  never point it at a real database while testing changes — use the H2
-  schema (`schema-h2.sql`) or a disposable Postgres instance.
-- The Docker image is pushed to `docker-registry.mosip.io:5000` per the
-  README — do not add a publish step to this repo's own CI without
-  confirming that is still the intended registry.
+- Talks directly to the `mosip_idrepo` production-shaped schema — never
+  point it at a real database while testing; use H2 (`schema-h2.sql`) or a
+  disposable Postgres instance.
+- Docker image is pushed to `docker-registry.mosip.io:5000` per the
+  README — confirm that's still the intended registry before adding a
+  publish step to this repo's CI.
 
 ## Agent rules
 
 ### Do
 
 1. Put VM `-D` system properties before `-jar` in every command example.
-2. Run `mvn clean install` (and `mvn test`) locally before submitting a
-   change here — this module has no CI coverage in this repository.
-3. Keep entity/repository changes consistent with the `mosip_idrepo` schema
-   used by the wider ID-Repository service family.
+2. Run `mvn clean install`/`mvn test` locally before submitting a change —
+   no CI coverage here.
+3. Keep entity/repository changes consistent with the wider ID-Repository
+   service family's `mosip_idrepo` schema.
 
 ### Do not
 
-1. Do not run this job's credential-feeding logic against a real/production
-   `mosip_idrepo` database while testing.
-2. Do not assume `.github/workflows/push-trigger.yml` builds this module —
-   it does not.
-3. Do not hardcode partner IDs, DB credentials, or config-server URLs in
-   source or properties files.
+1. Run this job against a real/production `mosip_idrepo` database.
+2. Hardcode partner IDs, DB credentials, or config-server URLs.
+</content>
