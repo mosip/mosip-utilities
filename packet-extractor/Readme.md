@@ -32,9 +32,10 @@ After that, run following commands:
 $ mkdir .venv
 $ mkdir logs
 $ mkdir output
-$ pipenv run python ./main.py --file
+$ pipenv shell
+$ sudo python3 ./main.py --file
 or
-$ pipenv run python ./main.py --db
+$ sudo python3 ./main.py --db
 ```
 
 ## Output
